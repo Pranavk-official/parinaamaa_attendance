@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "LeaveBalance" ADD COLUMN     "perMonth" DOUBLE PRECISION NOT NULL DEFAULT 0;
