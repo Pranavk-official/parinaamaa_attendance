@@ -6,6 +6,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: attendance
+    networks:
+      - internal
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -22,10 +24,12 @@ services:
       context: .
       target: prod
     restart: unless-stopped
+    # One port for both sides: published on the host, and what Next listens on.
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     environment:
       NODE_ENV: production
+      PORT: ${PORT:-3000}
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/attendance
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?set BETTER_AUTH_URL in .env}
@@ -34,14 +38,23 @@ services:
       MANAGER_EMAIL: ${MANAGER_EMAIL:-}
     # ofelia waits on this; without it compose refuses to start the scheduler.
     healthcheck:
-      test: ["CMD-SHELL", "bun -e \"const r = await fetch('http://127.0.0.1:3000/login'); process.exit(r.ok ? 0 : 1)\""]
+      test: ["CMD-SHELL", "bun -e \"const p = process.env.PORT || 3000; const r = await fetch('http://127.0.0.1:' + p + '/login'); process.exit(r.ok ? 0 : 1)\""]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
+    networks:
+      - internal
+      - dokploy-network
     depends_on:
       db:
         condition: service_healthy
+    labels:
+      ofelia.enabled: "true"
+      ofelia.job-exec.payroll.schedule: "0 0 1 * *"
+      # Runs inside this container, which has bun but no wget or curl, and reads
+      # CRON_SECRET and PORT from its own environment rather than a label.
+      ofelia.job-exec.payroll.command: "bun -e \"const p = process.env.PORT || 3000; const r = await fetch('http://127.0.0.1:' + p + '/api/cron/export-payroll', { method: 'POST', headers: { authorization: 'Bearer ' + process.env.CRON_SECRET } }); if (!r.ok) { console.error(r.status); process.exit(1) }\""
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
@@ -52,15 +65,23 @@ services:
     depends_on:
       web:
         condition: service_healthy
+    networks:
+      - internal
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     command: daemon --docker
-    labels:
-      ofelia.enable: "true"
-      ofelia.job-exec.payroll.schedule: "0 0 1 * *"
-      # Runs inside the web container, which has bun but no wget or curl, and
-      # reads CRON_SECRET from that container instead of leaking it into a label.
-      ofelia.job-exec.payroll.command: "bun -e \"const r = await fetch('http://127.0.0.1:3000/api/cron/export-payroll', { method: 'POST', headers: { authorization: 'Bearer ' + process.env.CRON_SECRET } }); if (!r.ok) { console.error(r.status); process.exit(1) }\""
+
+networks:
+  # Private to this stack: Postgres and the scheduler are never reachable from
+  # outside it.
+  internal:
+    driver: bridge
+  # Dokploy's shared network, where its Traefik lives. Only the web service
+  # joins it, so a domain attached in Dokploy can reach the app. Not on
+  # Dokploy? Run `docker network create dokploy-network` once, or delete this
+  # network and web's reference to it.
+  dokploy-network:
+    external: true
 
 volumes:
   pgdata:

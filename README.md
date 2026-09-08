@@ -49,7 +49,8 @@ files read it. Generate secrets with `openssl rand -hex 32`.
 | `CRON_SECRET` | yes | Bearer token for `POST /api/cron/export-payroll`. The scheduler reads it from inside the web container. |
 | `OFFICE_IP_ADDRESS` | no | Public IP of the office. Set it and `/attendance/wfo-punch` (see [the office QR code](#the-office-qr-code)) rejects scans from anywhere else. **Leave blank and the network guard is off** — any signed-in scan punches in. |
 | `MANAGER_EMAIL` | no | Overrides who leave mail is addressed to. Defaults to the address in `src/lib/leave-mail.ts`. |
-| `PORT` | no | Host port for production compose. Default `3000`. |
+| `PORT_EXTERNAL` | no | Host port published by compose. Default `3000`. Change it when the host already uses 3000 — Dokploy's own UI does. |
+| `PORT_INTERNAL` | no | Port Next listens on inside the container, passed through as `PORT`. Default `3000`. The healthcheck and the payroll cron both read it, so they follow automatically. |
 
 ### Things that are configured in code, not env
 
@@ -111,6 +112,50 @@ sign-in** — they are guessable from the domain alone.
 
 An `ofelia` container calls the payroll export on the first of each month. It
 waits for the web container's healthcheck, so do not remove that healthcheck.
+
+Two things about those labels are easy to get wrong, and both fail quietly:
+
+- They live on the **web** service, not on `ofelia`. Ofelia execs into the
+  container that carries them. On `ofelia` itself the job registers and then
+  fails with `error creating exec: No such container:`.
+- The opt-in label is `ofelia.enabled`, not `ofelia.enable`. With the wrong
+  spelling ofelia finds no jobs, logs `unable to start a empty scheduler`, and
+  restart-loops.
+
+The command runs `bun`, because the image has neither `wget` nor `curl`, and
+reads `CRON_SECRET` and `PORT` from the container's own environment rather than
+from a label — which also keeps the secret out of `docker inspect`.
+
+### Networks
+
+Two, in production:
+
+| Network | Members | Why |
+| --- | --- | --- |
+| `internal` | db, web, ofelia | Private to the stack. Postgres and the scheduler are never reachable from outside it. |
+| `dokploy-network` | web only | Dokploy's shared network, where its Traefik runs. A domain attached in Dokploy reaches the app through it. |
+
+Declared `external: true`, so Dokploy's own network is used rather than a new
+one. Deploying without Dokploy? Either run `docker network create dokploy-network`
+once, or delete that network and web's reference to it. The dev stack has no
+Traefik, so it gets `internal` only.
+
+### Dokploy
+
+Create a **Compose** service, not an Application — an Application builds a
+single container from the Dockerfile and gives you no Postgres and no
+scheduler. Then:
+
+- Set the environment variables from the table above in the **Environment** tab.
+- Set `PORT` to something free. Dokploy's own UI holds `3000`, and a clash
+  there fails the deploy with `Bind for 0.0.0.0:3000 failed: port is already
+  allocated`.
+- Attach a domain in the **Domains** tab, pointing at service `web` and
+  whatever `PORT` you chose.
+
+Once a domain routes through Traefik, the published host port earns nothing —
+delete the `ports:` block from the web service if you would rather not expose
+it at all.
 
 Postgres data lives in the `pgdata` volume. Back that up.
 
