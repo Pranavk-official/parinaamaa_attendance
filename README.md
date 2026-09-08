@@ -157,6 +157,32 @@ Once a domain routes through Traefik, the published host port earns nothing —
 delete the `ports:` block from the web service if you would rather not expose
 it at all.
 
+#### Domain returns 404
+
+A 404 at the domain while the container logs show `✓ Ready` is Traefik, not the
+app: no router matched, or the one that did could not reach the container. On
+the server, in order:
+
+```bash
+# 1. Does the app answer at all? (uses the published host port)
+curl -I http://localhost:$PORT/login
+
+# 2. Is web actually on Dokploy's network?
+docker inspect <project>-web-1 --format '{{json .NetworkSettings.Networks}}' | tr ',' '\n' | grep -o '"[a-z-]*network"'
+
+# 3. Did Dokploy write a router for the domain?
+docker inspect <project>-web-1 --format '{{json .Config.Labels}}' | tr ',' '\n' | grep traefik
+```
+
+`web` deliberately joins two networks, so Traefik has to be told which one to
+dial — that is the `traefik.docker.network: dokploy-network` label on the
+service. Without it Traefik can pick `internal`, which its own container is not
+on, and every request 404s.
+
+If step 3 shows no `traefik.http.routers.*` labels, Dokploy did not inject
+them: re-save the domain in the Domains tab and redeploy. Dokploy's generated
+labels merge with the ones already in the file.
+
 Postgres data lives in the `pgdata` volume. Back that up.
 
 ---

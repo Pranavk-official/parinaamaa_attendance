@@ -52,6 +52,9 @@ services:
       db:
         condition: service_healthy
     labels:
+      # web sits on two networks; without this Traefik may dial it on
+      # `internal`, which its own container cannot reach, and answers 404.
+      traefik.docker.network: dokploy-network
       ofelia.enabled: "true"
       ofelia.job-exec.payroll.schedule: "0 0 1 * *"
       # Runs inside this container, which has bun but no wget or curl, and reads
