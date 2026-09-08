@@ -163,25 +163,28 @@ A 404 at the domain while the container logs show `✓ Ready` is Traefik, not th
 app: no router matched, or the one that did could not reach the container. On
 the server, in order:
 
+Dokploy does not route by container labels. Its routers come from Traefik's
+**file provider** — you can spot this in Traefik's own logs, where router names
+end in `@file` rather than `@docker`. So there is nothing to add to this compose
+file, and inspecting container labels tells you nothing.
+
+The router file is written when the compose is **deployed**, not when the domain
+is saved. Adding or editing a domain and not redeploying leaves Traefik with no
+router for the host, and every request 404s. Dokploy says as much in a banner on
+the domain dialog.
+
+To check, in order:
+
 ```bash
 # 1. Does the app answer at all? (uses the published host port)
 curl -I http://localhost:$PORT/login
 
-# 2. Is web actually on Dokploy's network?
-docker inspect <project>-web-1 --format '{{json .NetworkSettings.Networks}}' | tr ',' '\n' | grep -o '"[a-z-]*network"'
-
-# 3. Did Dokploy write a router for the domain?
-docker inspect <project>-web-1 --format '{{json .Config.Labels}}' | tr ',' '\n' | grep traefik
+# 2. Did Dokploy write a router file for this app?
+ls /etc/dokploy/traefik/dynamic/ | grep -i <app-name>
 ```
 
-`web` deliberately joins two networks, so Traefik has to be told which one to
-dial — that is the `traefik.docker.network: dokploy-network` label on the
-service. Without it Traefik can pick `internal`, which its own container is not
-on, and every request 404s.
-
-Step 3 is the decisive one. No `traefik.http.routers.*` labels means Dokploy
-did not inject them — most likely because the service already carries a
-`labels:` block of its own, and the symptom is a silent 404.
+Or open **Traefik File System** in the Dokploy sidebar and look for the app's
+`.yml`. No file means the domain was never applied: redeploy the compose.
 
 Postgres data lives in the `pgdata` volume. Back that up.
 

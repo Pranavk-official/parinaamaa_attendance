@@ -52,10 +52,6 @@ services:
       db:
         condition: service_healthy
     labels:
-      # Routing itself is owned by Dokploy's Domains tab. This only tells
-      # Traefik which of web's two networks to dial it on; without it Traefik
-      # can pick `internal`, which its own container is not on.
-      traefik.docker.network: dokploy-network
       ofelia.enabled: "true"
       ofelia.job-exec.payroll.schedule: "0 0 1 * *"
       # Runs inside this container, which has bun but no wget or curl, and reads
