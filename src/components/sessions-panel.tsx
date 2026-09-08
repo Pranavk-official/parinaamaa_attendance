@@ -42,7 +42,7 @@ function SessionRow({
 }) {
   return (
     <TableRow>
-      <TableCell>
+      <TableCell data-label="Device" data-wrap>
         {session.userAgent ? (
           <span className="block text-sm">{session.userAgent}</span>
         ) : (
@@ -50,13 +50,15 @@ function SessionRow({
         )}
         <span className="text-xs text-muted-foreground">{session.ipAddress ?? "-"}</span>
       </TableCell>
-      <TableCell className="text-sm text-muted-foreground">
+      <TableCell data-label="Signed in" className="text-sm text-muted-foreground">
         {new Date(session.createdAt).toLocaleString()}
       </TableCell>
-      <TableCell className="text-sm text-muted-foreground">
+      <TableCell data-label="Expires" className="text-sm text-muted-foreground">
         {new Date(session.expiresAt).toLocaleString()}
       </TableCell>
-      <TableCell>
+      {/* Empty label, not none: a stacked card would otherwise stretch the
+          badge across a footer row. */}
+      <TableCell data-label="">
         {session.id === currentId ? (
           <Badge>This device</Badge>
         ) : (
@@ -102,6 +104,7 @@ export function SessionsPanel() {
       <div className="flex justify-end">
         <Button
           variant="outline"
+          className="w-full sm:w-auto"
           disabled={pending}
           onClick={() => setRevokeAll(true)}
         >
@@ -109,7 +112,7 @@ export function SessionsPanel() {
           Revoke all other sessions
         </Button>
       </div>
-      <Table>
+      <Table stacked>
         <TableHeader>
           <TableRow>
             <TableHead>Device</TableHead>
@@ -131,8 +134,8 @@ export function SessionsPanel() {
           {sessions.length === 0 &&
             Array.from({ length: 3 }, (_, i) => (
               <TableRow key={i}>
-                {Array.from({ length: 4 }, (_, c) => (
-                  <TableCell key={c}>
+                {["Device", "Signed in", "Expires", ""].map((label) => (
+                  <TableCell key={label} data-label={label}>
                     <Skeleton className="h-4 w-full" />
                   </TableCell>
                 ))}

@@ -75,6 +75,9 @@ const BOTTOM_NAV_SLOTS = 4;
 /** A route, or an in-place action such as signing out. */
 type NavItem = {
   label: string;
+  /** Bottom-nav caption. A tab is ~1/5 of a phone's width, so long labels
+      truncate there; give anything over ~7 characters a short form. */
+  short?: string;
   icon: typeof LayoutDashboard;
   href?: string;
   onClick?: () => void;
@@ -270,7 +273,7 @@ function BottomNav({
                 : {})}
             >
               <Icon className="size-5" />
-              <span className="truncate">{item.label}</span>
+              <span className="truncate">{item.short ?? item.label}</span>
             </Button>
           );
         })}
@@ -315,11 +318,16 @@ export function Nav({
     {
       label: "Home",
       items: [
-        { href: "/", label: "Dashboard", icon: LayoutDashboard },
+        { href: "/", label: "Dashboard", short: "Home", icon: LayoutDashboard },
         ...(isEmployee
-          ? [{ href: "/leaves/new", label: "Apply Leave", icon: CalendarPlus }]
+          ? [{ href: "/leaves/new", label: "Apply Leave", short: "Apply", icon: CalendarPlus }]
           : []),
-        { href: "/leaves", label: isEmployee ? "My Leave" : "Leave Queue", icon: Inbox },
+        {
+          href: "/leaves",
+          label: isEmployee ? "My Leave" : "Leave Queue",
+          short: "Leave",
+          icon: Inbox,
+        },
       ],
     },
     ...(canManageUsers || canViewReports
@@ -330,8 +338,8 @@ export function Nav({
               ...(canManageUsers ? [{ href: "/users", label: "Users", icon: Users }] : []),
               ...(canViewReports
                 ? [
-                    { href: "/audit", label: "Audit Log", icon: FileText },
                     { href: "/reports", label: "Reports", icon: FileSpreadsheet },
+                    { href: "/audit", label: "Audit Log", short: "Audit", icon: FileText },
                   ]
                 : []),
             ],

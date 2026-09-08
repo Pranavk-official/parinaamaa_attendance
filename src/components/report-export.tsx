@@ -60,7 +60,7 @@ export function ReportExport({ month }: { month: string }) {
         </Select>
         <FieldDescription>Payroll period to summarise.</FieldDescription>
       </Field>
-      <ButtonGroup>
+      <ButtonGroup className="w-full sm:w-auto *:flex-1">
         <Button render={<a href={href("xlsx")} />}>
           <FileSpreadsheet />
           Export XLSX

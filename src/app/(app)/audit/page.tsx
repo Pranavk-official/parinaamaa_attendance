@@ -59,7 +59,7 @@ export default async function AuditPage() {
               </EmptyHeader>
             </Empty>
           ) : (
-            <Table>
+            <Table stacked>
               <TableHeader>
                 <TableRow>
                   <TableHead>When</TableHead>
@@ -73,20 +73,37 @@ export default async function AuditPage() {
               <TableBody>
                 {logs.map((l) => (
                   <TableRow key={l.id}>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                    <TableCell
+                      data-label="When"
+                      className="whitespace-nowrap text-muted-foreground"
+                    >
                       {l.createdAt.toLocaleString()}
                     </TableCell>
-                    <TableCell className="font-medium">{l.actor?.name ?? "system"}</TableCell>
-                    <TableCell>
+                    <TableCell data-label="Actor" className="font-medium">
+                      {l.actor?.name ?? "system"}
+                    </TableCell>
+                    <TableCell data-label="Action">
                       <Badge variant="secondary">{l.action}</Badge>
                     </TableCell>
-                    <TableCell className="hidden font-mono text-muted-foreground md:table-cell">
+                    <TableCell
+                      data-label="Entity"
+                      data-wrap
+                      className="hidden font-mono text-muted-foreground md:table-cell"
+                    >
                       {l.entity}:{l.entityId?.slice(0, 8)}
                     </TableCell>
-                    <TableCell className="hidden max-w-55 truncate font-mono text-muted-foreground lg:table-cell">
+                    <TableCell
+                      data-label="Old"
+                      data-wrap
+                      className="hidden max-w-55 truncate font-mono text-muted-foreground lg:table-cell"
+                    >
                       {jsonSummary(l.oldValues)}
                     </TableCell>
-                    <TableCell className="hidden max-w-55 truncate font-mono text-muted-foreground lg:table-cell">
+                    <TableCell
+                      data-label="New"
+                      data-wrap
+                      className="hidden max-w-55 truncate font-mono text-muted-foreground lg:table-cell"
+                    >
                       {jsonSummary(l.newValues)}
                     </TableCell>
                   </TableRow>

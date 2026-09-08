@@ -53,6 +53,31 @@ function time(d: Date) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * Approved leave days per calendar month, oldest first. Keying by year keeps
+ * two years' Januarys apart; the year only reaches the label when the series
+ * actually spans more than one.
+ */
+function monthlyLeaveSeries(
+  leaves: { startDate: Date; endDate: Date; isHalfDay: boolean }[]
+) {
+  const byMonth = new Map<string, number>();
+  for (const l of leaves) {
+    const key = `${l.startDate.getFullYear()}-${String(l.startDate.getMonth() + 1).padStart(2, "0")}`;
+    byMonth.set(key, (byMonth.get(key) ?? 0) + countDays(l.startDate, l.endDate, l.isHalfDay));
+  }
+  const keys = [...byMonth.keys()].sort();
+  const multiYear = new Set(keys.map((k) => k.slice(0, 4))).size > 1;
+  return keys.map((key) => {
+    const [year, month] = key.split("-").map(Number);
+    const label = new Date(year, month - 1, 1).toLocaleString("en-US", { month: "short" });
+    return {
+      month: multiYear ? `${label} '${String(year).slice(2)}` : label,
+      days: byMonth.get(key) ?? 0,
+    };
+  });
+}
+
 function monthStart() {
   const now = new Date();
   return toDateOnly(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -95,8 +120,14 @@ export default async function DashboardPage() {
 async function AdminDashboard({ user }: { user: CurrentUser }) {
   const today = toDateOnly(new Date());
 
-  const [employeeCount, todayAttendance, pendingRequests, approvedThisYear, onLeaveToday] =
-    await Promise.all([
+  const [
+    employeeCount,
+    todayAttendance,
+    pendingRequests,
+    pendingCount,
+    approvedThisYear,
+    onLeaveToday,
+  ] = await Promise.all([
       prisma.user.count({ where: EMPLOYEE_WHERE }),
       prisma.attendance.findMany({
         where: { date: today },
@@ -109,6 +140,8 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
         orderBy: { createdAt: "asc" },
         take: 8,
       }),
+      // The list above is capped for display; the stat card needs the real total.
+      prisma.leaveRequest.count({ where: { status: "PENDING" } }),
       prisma.leaveRequest.findMany({
         where: { status: "APPROVED" },
         select: { type: true, startDate: true, endDate: true, isHalfDay: true },
@@ -123,11 +156,6 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
     { WFO: 0, WFH: 0, OFFDAY_WORK: 0 }
   );
 
-  const monthlyMap = new Map<string, number>();
-  for (const l of approvedThisYear) {
-    const m = l.startDate.toLocaleString("en-US", { month: "short" });
-    monthlyMap.set(m, (monthlyMap.get(m) ?? 0) + countDays(l.startDate, l.endDate, l.isHalfDay));
-  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -141,7 +169,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
         subtitle={`${user.designation ?? user.role?.name ?? "Administrator"} · ${today.toDateString()}`}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard label="Employees" value={employeeCount} icon={Users} />
         <StatCard
           label="Present today"
@@ -150,30 +178,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
           icon={UserCheck}
         />
         <StatCard label="On leave today" value={onLeaveToday} icon={CalendarX} />
-        <StatCard label="Pending requests" value={pendingRequests.length} icon={Inbox} />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Today&apos;s WFO / WFH split</CardTitle>
-            <CardDescription>Where the team is working right now.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DailySplitChart data={[{ date: iso(today), ...todaySplit }]} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Monthly leave usage</CardTitle>
-            <CardDescription>Approved leave days across all staff, FY {fiscalYear()}.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MonthlyLeaveChart
-              data={[...monthlyMap.entries()].map(([month, days]) => ({ month, days }))}
-            />
-          </CardContent>
-        </Card>
+        <StatCard label="Pending requests" value={pendingCount} icon={Inbox} />
       </div>
 
       <Card>
@@ -231,6 +236,27 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
           )}
         </CardContent>
       </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Today&apos;s WFO / WFH split</CardTitle>
+            <CardDescription>Where the team is working right now.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <DailySplitChart data={[{ date: iso(today), ...todaySplit }]} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Monthly leave usage</CardTitle>
+            <CardDescription>Approved leave days across all staff, FY {fiscalYear()}.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MonthlyLeaveChart data={monthlyLeaveSeries(approvedThisYear)} />
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>
@@ -341,11 +367,6 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
     0
   );
 
-  const monthlyMap = new Map<string, number>();
-  for (const l of leaveRequests) {
-    const m = l.startDate.toLocaleString("en-US", { month: "short" });
-    monthlyMap.set(m, (monthlyMap.get(m) ?? 0) + countDays(l.startDate, l.endDate, l.isHalfDay));
-  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -446,9 +467,7 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
             <CardDescription>Approved leave days, FY {fy}.</CardDescription>
           </CardHeader>
           <CardContent>
-            <MonthlyLeaveChart
-              data={[...monthlyMap.entries()].map(([month, days]) => ({ month, days }))}
-            />
+            <MonthlyLeaveChart data={monthlyLeaveSeries(leaveRequests)} />
           </CardContent>
         </Card>
       </div>

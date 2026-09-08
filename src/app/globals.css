@@ -177,6 +177,9 @@
     gap: 1rem;
     border: 0;
     padding: 0;
+    /* The 12px table body is a desktop density. A card has the room, and a
+       phone at arm's length needs the extra pixel. */
+    font-size: 0.8125rem;
     /* Label left, value right — the card reads as pairs. */
     text-align: right;
     /* Undo the table-mode truncation: a card can wrap. */
@@ -192,6 +195,17 @@
     text-align: left;
     color: var(--muted-foreground);
     font-weight: 400;
+  }
+
+  /* Long values — prose, JSON, anything that wraps to several lines — read
+     badly as a right-aligned pair. Mark the cell `data-wrap` and it stacks its
+     label above the value instead. */
+  table[data-stacked] td[data-wrap] {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.125rem;
+    text-align: left;
+    overflow-wrap: anywhere;
   }
 
   /* The leading cell is the card's title: full width, no label — a name needs
@@ -227,7 +241,6 @@
   table[data-stacked] td:not([data-label]):not(:first-child) > * {
     display: flex;
     flex: 1;
-    justify-content: stretch;
     gap: 0.5rem;
   }
 
@@ -237,5 +250,11 @@
 
   table[data-stacked] td:not([data-label]):not(:first-child) button {
     flex: 1;
+  }
+
+  /* An icon-only button carries an aria-label instead of text. Stretching it
+     to a third of the footer makes a destructive tap far too easy to hit. */
+  table[data-stacked] td:not([data-label]):not(:first-child) button[aria-label] {
+    flex: none;
   }
 }

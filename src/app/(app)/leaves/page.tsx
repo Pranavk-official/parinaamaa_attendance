@@ -59,6 +59,13 @@ function rowFor(l: LeaveRow, canManage: boolean, showEmployee: boolean, viewerId
   const days = countDays(l.startDate, l.endDate, l.isHalfDay);
   return (
     <TableRow key={l.id}>
+      {/* For a manager the person identifies the row — and titles its card on
+          a phone. An employee's every row is their own, so the type leads. */}
+      {showEmployee && (
+        <TableCell data-label="Employee" className="font-medium">
+          {l.user.name}
+        </TableCell>
+      )}
       <TableCell data-label="Type" className="whitespace-nowrap font-medium">
         {l.type.replaceAll("_", " ")}
         {l.isHalfDay && (
@@ -68,7 +75,6 @@ function rowFor(l: LeaveRow, canManage: boolean, showEmployee: boolean, viewerId
           </span>
         )}
       </TableCell>
-      {showEmployee && <TableCell data-label="Employee">{l.user.name}</TableCell>}
       <TableCell data-label="Start" className="text-muted-foreground">
         {iso(l.startDate)}
       </TableCell>
@@ -80,6 +86,7 @@ function rowFor(l: LeaveRow, canManage: boolean, showEmployee: boolean, viewerId
       </TableCell>
       <TableCell
         data-label="Reason"
+        data-wrap
         className="hidden max-w-56 truncate text-muted-foreground lg:table-cell"
       >
         {l.reason}
@@ -120,7 +127,9 @@ export default async function LeavesPage() {
   const requests = await prisma.leaveRequest.findMany({
     where: exempt ? {} : { userId: user.id },
     include: { user: { select: { name: true, email: true } } },
-    orderBy: { createdAt: "desc" },
+    // PENDING sorts first in the enum, so what needs a decision is at the top
+    // of the list — on a phone the rest is below the fold either way.
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     take: 30,
   });
 
@@ -167,8 +176,8 @@ export default async function LeavesPage() {
             <Table stacked>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Type</TableHead>
                   {exempt && <TableHead>Employee</TableHead>}
+                  <TableHead>Type</TableHead>
                   <TableHead>Start</TableHead>
                   <TableHead className="hidden md:table-cell">End</TableHead>
                   <TableHead className="text-right">Days</TableHead>

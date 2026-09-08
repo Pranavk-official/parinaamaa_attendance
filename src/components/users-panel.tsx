@@ -3,12 +3,24 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Pencil, UserPlus } from "lucide-react";
+import { Pencil, Search, UserPlus, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import {
   Table,
   TableBody,
@@ -483,94 +495,144 @@ export function UsersPanel({
   roles: RoleRow[];
   fiscalYear: string;
 }) {
+  const [query, setQuery] = useState("");
   const assignableRoles = isSuperAdmin
     ? roles
     : roles.filter((r) => r.name !== "Super Admin");
+
+  // A phone shows one account per card, so a directory of any size is
+  // unreachable by scrolling alone. Client-side is enough: the page already
+  // ships every row.
+  const needle = query.trim().toLowerCase();
+  const shown = needle
+    ? users.filter((u) =>
+        [u.name, u.email, u.designation, u.role?.name]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle),
+      )
+    : users;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>
-          {users.length} account{users.length === 1 ? "" : "s"}
+          {needle ? `${shown.length} of ${users.length}` : users.length} account
+          {users.length === 1 ? "" : "s"}
         </CardTitle>
-        <CardAction>
-          <div className="flex gap-2">
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {/* Search and the two create paths share a row from sm up; on a phone
+            they stack, because three controls do not fit next to a title. */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <InputGroup className="sm:max-w-72">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              placeholder="Search name, email, role"
+              aria-label="Search accounts"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </InputGroup>
+          <div className="grid grid-cols-2 gap-2 sm:ml-auto sm:flex">
             <UsersImport roles={assignableRoles} />
             <CreateUserDialog roles={assignableRoles} />
           </div>
-        </CardAction>
-      </CardHeader>
-      <CardContent>
-      <Table stacked>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead className="hidden md:table-cell">Designation</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead className="hidden md:table-cell">Salary</TableHead>
-            <TableHead className="hidden lg:table-cell">Leave balance</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {users.map((u) => (
-            <TableRow key={u.id}>
-              <TableCell data-label="Name" className="font-medium">
-                {u.name}
-                {u.id === currentUserId && (
-                  <span className="ml-2 font-normal text-muted-foreground">(you)</span>
-                )}
-                <span className="block font-normal text-muted-foreground">{u.email}</span>
-              </TableCell>
-              <TableCell data-label="Designation" className="hidden text-muted-foreground md:table-cell">
-                {u.designation ?? "—"}
-              </TableCell>
-              <TableCell data-label="Role">
-                <Badge variant={u.isSuperAdmin ? "default" : "secondary"}>
-                  {u.role?.name ?? (u.isSuperAdmin ? "Super Admin" : "—")}
-                </Badge>
-              </TableCell>
-              <TableCell data-label="Salary" className="hidden whitespace-nowrap tabular-nums md:table-cell">
-                {u.salary === null ? (
-                  <span className="text-muted-foreground">—</span>
-                ) : (
-                  <>
-                    {money.format(u.salary)}
-                    <span className="text-muted-foreground">
-                      {u.annualSalary ? " /yr" : " /mo"}
-                    </span>
-                  </>
-                )}
-              </TableCell>
-              <TableCell data-label="Leave" className="hidden lg:table-cell">
-                <div className="flex flex-wrap gap-1.5">
-                  {u.leaveBalances.length === 0 && (
-                    <span className="text-muted-foreground">None</span>
-                  )}
-                  {u.leaveBalances.map((b) => (
-                    <Badge key={b.leaveType} variant="outline">
-                      {b.leaveType.replaceAll("_", " ")}{" "}
-                      {b.perMonth > 0
-                        ? `${b.perMonth}/mo · ${b.used} used`
-                        : `${b.used}/${b.allocated}`}
+        </div>
+
+        {shown.length === 0 ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <UsersRound />
+              </EmptyMedia>
+              <EmptyTitle>No matching accounts</EmptyTitle>
+              <EmptyDescription>
+                Nothing matches &ldquo;{query.trim()}&rdquo;. Try a name, email, or role.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <Table stacked>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead className="hidden md:table-cell">Designation</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead className="hidden md:table-cell">Salary</TableHead>
+                <TableHead className="hidden lg:table-cell">Leave balance</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {shown.map((u) => (
+                <TableRow key={u.id}>
+                  <TableCell data-label="Name" className="font-medium">
+                    {u.name}
+                    {u.id === currentUserId && (
+                      <span className="ml-2 font-normal text-muted-foreground">(you)</span>
+                    )}
+                    <span className="block font-normal text-muted-foreground">{u.email}</span>
+                  </TableCell>
+                  <TableCell
+                    data-label="Designation"
+                    className="hidden text-muted-foreground md:table-cell"
+                  >
+                    {u.designation ?? "—"}
+                  </TableCell>
+                  <TableCell data-label="Role">
+                    <Badge variant={u.isSuperAdmin ? "default" : "secondary"}>
+                      {u.role?.name ?? (u.isSuperAdmin ? "Super Admin" : "—")}
                     </Badge>
-                  ))}
-                </div>
-              </TableCell>
-              <TableCell>
-                <div className="flex justify-end gap-2">
-                  <EditUserDialog
-                    user={u}
-                    roles={assignableRoles}
-                    canEdit={!u.isSuperAdmin || isSuperAdmin}
-                    fiscalYear={fiscalYear}
-                  />
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+                  </TableCell>
+                  <TableCell
+                    data-label="Salary"
+                    className="hidden whitespace-nowrap tabular-nums md:table-cell"
+                  >
+                    {u.salary === null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <>
+                        {money.format(u.salary)}
+                        <span className="text-muted-foreground">
+                          {u.annualSalary ? " /yr" : " /mo"}
+                        </span>
+                      </>
+                    )}
+                  </TableCell>
+                  <TableCell data-label="Leave" data-wrap className="hidden lg:table-cell">
+                    <div className="flex flex-wrap gap-1.5">
+                      {u.leaveBalances.length === 0 && (
+                        <span className="text-muted-foreground">None</span>
+                      )}
+                      {u.leaveBalances.map((b) => (
+                        <Badge key={b.leaveType} variant="outline">
+                          {b.leaveType.replaceAll("_", " ")}{" "}
+                          {b.perMonth > 0
+                            ? `${b.perMonth}/mo · ${b.used} used`
+                            : `${b.used}/${b.allocated}`}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-2">
+                      <EditUserDialog
+                        user={u}
+                        roles={assignableRoles}
+                        canEdit={!u.isSuperAdmin || isSuperAdmin}
+                        fiscalYear={fiscalYear}
+                      />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </CardContent>
     </Card>
   );
