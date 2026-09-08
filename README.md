@@ -163,15 +163,22 @@ A 404 at the domain while the container logs show `✓ Ready` is Traefik, not th
 app: no router matched, or the one that did could not reach the container. On
 the server, in order:
 
-Dokploy does not route by container labels. Its routers come from Traefik's
-**file provider** — you can spot this in Traefik's own logs, where router names
-end in `@file` rather than `@docker`. So there is nothing to add to this compose
-file, and inspecting container labels tells you nothing.
+For a Compose service, Dokploy adds its Traefik labels **into this file** at
+deploy time, and it adds them as a **list**. That is why the web service writes
+its ofelia labels in list form:
 
-The router file is written when the compose is **deployed**, not when the domain
-is saved. Adding or editing a domain and not redeploying leaves Traefik with no
-router for the host, and every request 404s. Dokploy says as much in a banner on
-the domain dialog.
+```yaml
+    labels:
+      - "ofelia.enabled=true"
+```
+
+A `labels:` mapping (`key: value`) cannot take Dokploy's appended entries, the
+router is never created, and Traefik answers 404 for the host with nothing in
+its own log about it. Keep this list a list.
+
+Routing also needs the service on `dokploy-network`, which `web` already joins,
+and the labels are written on **deploy** — saving a domain alone changes
+nothing, as Dokploy's own banner says.
 
 To check, in order:
 
@@ -179,12 +186,9 @@ To check, in order:
 # 1. Does the app answer at all? (uses the published host port)
 curl -I http://localhost:$PORT/login
 
-# 2. Did Dokploy write a router file for this app?
-ls /etc/dokploy/traefik/dynamic/ | grep -i <app-name>
+# 2. Did Dokploy inject a router?
+docker inspect <project>-web-1 --format '{{json .Config.Labels}}' | tr ',' '\n' | grep traefik
 ```
-
-Or open **Traefik File System** in the Dokploy sidebar and look for the app's
-`.yml`. No file means the domain was never applied: redeploy the compose.
 
 Postgres data lives in the `pgdata` volume. Back that up.
 

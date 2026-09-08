@@ -51,12 +51,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # List form, not a mapping: Dokploy appends its own Traefik labels to
+    # this list at deploy time, and cannot merge them into a mapping.
     labels:
-      ofelia.enabled: "true"
-      ofelia.job-exec.payroll.schedule: "0 0 1 * *"
-      # Runs inside this container, which has bun but no wget or curl, and reads
-      # CRON_SECRET and PORT from its own environment rather than a label.
-      ofelia.job-exec.payroll.command: "bun -e \"const p = process.env.PORT || 3000; const r = await fetch('http://127.0.0.1:' + p + '/api/cron/export-payroll', { method: 'POST', headers: { authorization: 'Bearer ' + process.env.CRON_SECRET } }); if (!r.ok) { console.error(r.status); process.exit(1) }\""
+      - "ofelia.enabled=true"
+      - "ofelia.job-exec.payroll.schedule=0 0 1 * *"
+      # Runs inside this container, which has bun but no wget or curl, and
+      # reads CRON_SECRET and PORT from its own environment.
+      - "ofelia.job-exec.payroll.command=bun -e \"const p = process.env.PORT || 3000; const r = await fetch('http://127.0.0.1:' + p + '/api/cron/export-payroll', { method: 'POST', headers: { authorization: 'Bearer ' + process.env.CRON_SECRET } }); if (!r.ok) { console.error(r.status); process.exit(1) }\""
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
