@@ -46,12 +46,12 @@ export default async function WfoPunchPage() {
   const headerList = await headers();
   const forwarded = headerList.get("x-forwarded-for") ?? headerList.get("x-real-ip");
   const clientIp = forwarded ? forwarded.split(",")[0].trim() : null;
+  // The network guard is opt-in: with OFFICE_IP_ADDRESS unset, any signed-in
+  // scan punches in. Set it to the office's public IP to turn the guard on.
   const officeIp = process.env.OFFICE_IP_ADDRESS;
 
   let result: { alreadyPunched: boolean; type?: string; error?: string } | null = null;
-  if (!officeIp) {
-    result = { alreadyPunched: false, error: "OFFICE_IP_ADDRESS not configured" };
-  } else if (!clientIp || clientIp !== officeIp) {
+  if (officeIp && clientIp !== officeIp) {
     result = { alreadyPunched: false, error: "Not on the office network. WFO punch rejected." };
   } else {
     const res = await punchIn(user.id, "WFO");

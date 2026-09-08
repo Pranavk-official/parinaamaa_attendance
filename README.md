@@ -47,7 +47,7 @@ files read it. Generate secrets with `openssl rand -hex 32`.
 | `BETTER_AUTH_SECRET` | yes | Session signing key. **32 characters minimum** — Better Auth refuses to start below that. |
 | `BETTER_AUTH_URL` | yes | Public origin, e.g. `https://attendance.example.com`. Used for auth callbacks and for the "Approve here" link in leave email. |
 | `CRON_SECRET` | yes | Bearer token for `POST /api/cron/export-payroll`. The scheduler reads it from inside the web container. |
-| `OFFICE_IP_ADDRESS` | for WFO punch | Public IP of the office. `/attendance/wfo-punch` (see [the office QR code](#the-office-qr-code)) compares the caller against it and rejects anything else. Leave blank and WFO punch-in is disabled with a visible message. |
+| `OFFICE_IP_ADDRESS` | no | Public IP of the office. Set it and `/attendance/wfo-punch` (see [the office QR code](#the-office-qr-code)) rejects scans from anywhere else. **Leave blank and the network guard is off** — any signed-in scan punches in. |
 | `MANAGER_EMAIL` | no | Overrides who leave mail is addressed to. Defaults to the address in `src/lib/leave-mail.ts`. |
 | `PORT` | no | Host port for production compose. Default `3000`. |
 
@@ -65,9 +65,9 @@ files read it. Generate secrets with `openssl rand -hex 32`.
 
 ### Behind a reverse proxy
 
-`OFFICE_IP_ADDRESS` is matched against the first entry of `x-forwarded-for`
-(falling back to `x-real-ip`). Your proxy must set one of those to the real
-client IP, or every WFO punch is rejected.
+If you set `OFFICE_IP_ADDRESS`, it is matched against the first entry of
+`x-forwarded-for` (falling back to `x-real-ip`). Your proxy must set one of
+those to the real client IP, or every WFO punch is rejected.
 
 ---
 
@@ -133,8 +133,8 @@ blocked by a balance check. Employees are the tracked staff.
 
 ### Attendance
 
-- **WFO** — scan the office QR, which opens `/attendance/wfo-punch`. The punch
-  only succeeds from `OFFICE_IP_ADDRESS`.
+- **WFO** — scan the office QR, which opens `/attendance/wfo-punch`. If
+  `OFFICE_IP_ADDRESS` is set, the punch only succeeds from that IP.
 - **WFH** — the punch widget on the dashboard.
 - **Offday work** — any punch on a Saturday, Sunday or a row in
   `CompanyHoliday` is recorded as offday work automatically.
@@ -157,12 +157,19 @@ Scanning it punches the visitor in straight away. Two things gate it:
 
 - **Signed in.** Someone with no session is sent to `/login?callbackUrl=/attendance/wfo-punch`
   and lands back on the punch page once they sign in.
-- **On the office network.** The page compares the caller's IP against
-  `OFFICE_IP_ADDRESS` and shows *"Not on the office network. WFO punch rejected."*
-  otherwise — so a photo of the QR is useless from home.
+- **On the office network — only if you switch it on.** With `OFFICE_IP_ADDRESS`
+  set, the page compares the caller's IP against it and otherwise shows
+  *"Not on the office network. WFO punch rejected."*, which makes a photo of the
+  QR useless from home. Left blank, the guard is off and any signed-in scan
+  works from anywhere.
 
 Scanning twice in a day is harmless: the second scan reports the existing punch
 rather than creating a second one.
+
+The login page's Open Graph image (`src/app/login/opengraph-image.tsx`) renders
+this same QR from `BETTER_AUTH_URL`, so sharing the login link in Slack or
+WhatsApp shows a scannable poster. Print from there, or generate your own from
+the URL above.
 
 One record per person per day. Punching is one-way: there is no second punch-in,
 so both punch buttons confirm first.
