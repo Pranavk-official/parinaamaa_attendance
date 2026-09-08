@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-import { CircleCheck, FileUp, TriangleAlert } from "lucide-react";
+import { CircleCheck, Download, FileUp, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,31 @@ import {
 import { createUserAction } from "@/lib/actions/users";
 
 type RoleRow = { id: string; name: string };
+
+// One header row plus a filled example, so the shape is obvious in a spreadsheet.
+const TEMPLATE = [
+  "name,email,password,designation,role,salary,salaryBasis,paidPerMonth,compensatory",
+  "Asha Nair,asha@company.local,changeme123,Software Engineer,Employee,85000,monthly,1,0",
+].join("\n");
+
+function downloadTemplate(format: "csv" | "xlsx") {
+  if (format === "xlsx") {
+    // No value in the template contains a comma, so splitting is enough.
+    const rows = TEMPLATE.split("\n").map((line) => line.split(","));
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(rows), "Users");
+    XLSX.writeFile(book, "users-import-template.xlsx");
+    return;
+  }
+  const url = URL.createObjectURL(
+    new Blob([TEMPLATE], { type: "text/csv;charset=utf-8" })
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "users-import-template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 type ParsedRow = {
   name: string;
@@ -172,6 +197,27 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Download template:</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => downloadTemplate("xlsx")}
+            >
+              <Download />
+              Excel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => downloadTemplate("csv")}
+            >
+              <Download />
+              CSV
+            </Button>
+          </div>
           <Input
             ref={inputRef}
             type="file"

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { version } from "../../package.json";
 import {
   CalendarCheck,
   CalendarPlus,
@@ -53,6 +54,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -74,6 +76,8 @@ type NavItem = {
   href?: string;
   onClick?: () => void;
 };
+
+type NavGroup = { label: string; items: NavItem[] };
 
 function initials(name: string) {
   return name
@@ -271,22 +275,45 @@ export function Nav({
   const pathname = usePathname();
   const [signingOut, setSigningOut] = useState(false);
 
-  const items: NavItem[] = [
-    { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    ...(isEmployee ? [{ href: "/leaves/new", label: "Apply Leave", icon: CalendarPlus }] : []),
-    { href: "/leaves", label: isEmployee ? "My Leave" : "Leave Queue", icon: Inbox },
-    ...(canManageUsers ? [{ href: "/users", label: "Users", icon: Users }] : []),
-    ...(canViewReports
+  // Grouped for the sidebar; BottomNav flattens them back into tabs.
+  const groups: NavGroup[] = [
+    {
+      label: "Home",
+      items: [
+        { href: "/", label: "Dashboard", icon: LayoutDashboard },
+        ...(isEmployee
+          ? [{ href: "/leaves/new", label: "Apply Leave", icon: CalendarPlus }]
+          : []),
+        { href: "/leaves", label: isEmployee ? "My Leave" : "Leave Queue", icon: Inbox },
+      ],
+    },
+    ...(canManageUsers || canViewReports
       ? [
-          { href: "/audit", label: "Audit Log", icon: FileText },
-          { href: "/reports", label: "Reports", icon: FileSpreadsheet },
+          {
+            label: "Manage",
+            items: [
+              ...(canManageUsers ? [{ href: "/users", label: "Users", icon: Users }] : []),
+              ...(canViewReports
+                ? [
+                    { href: "/audit", label: "Audit Log", icon: FileText },
+                    { href: "/reports", label: "Reports", icon: FileSpreadsheet },
+                  ]
+                : []),
+            ],
+          },
         ]
       : []),
-    // Employees get a direct sign-out where staff get session management.
-    isEmployee
-      ? { label: "Log out", icon: LogOut, onClick: () => setSigningOut(true) }
-      : { href: "/security", label: "Security", icon: Shield },
+    {
+      label: "Settings",
+      items: [
+        // Employees get a direct sign-out where staff get session management.
+        isEmployee
+          ? { label: "Log out", icon: LogOut, onClick: () => setSigningOut(true) }
+          : { href: "/security", label: "Security", icon: Shield },
+      ],
+    },
   ];
+  const items: NavItem[] = groups.flatMap((g) => g.items);
   const current = items.find((i) => i.href === pathname);
   // Employees get every item as a tab plus their own sign-out, so "More" would
   // open a sheet that shows them nothing new. Staff keep it: it is their only
@@ -312,31 +339,41 @@ export function Nav({
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {items.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <SidebarMenuItem key={item.label}>
-                      <SidebarMenuButton
-                        isActive={item.href === pathname}
-                        tooltip={item.label}
-                        onClick={item.onClick}
-                        {...(item.href ? { render: <Link href={item.href} /> } : {})}
-                      >
-                        <Icon />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          {groups.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <SidebarMenuItem key={item.label}>
+                        <SidebarMenuButton
+                          isActive={item.href === pathname}
+                          tooltip={item.label}
+                          onClick={item.onClick}
+                          {...(item.href ? { render: <Link href={item.href} /> } : {})}
+                        >
+                          <Icon />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
         </SidebarContent>
         <SidebarFooter>
-          <NavUser name={name} email={email} onSignOut={() => setSigningOut(true)} />
+          {/* The border makes the account block read as its own card, and
+              collapses away with the rest of the labels in icon mode. */}
+          <div className="rounded-md border border-sidebar-border group-data-[collapsible=icon]:border-transparent">
+            <NavUser name={name} email={email} onSignOut={() => setSigningOut(true)} />
+          </div>
+          <p className="px-2 pb-1 text-center text-[0.6875rem] text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">
+            Version {version}
+          </p>
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>

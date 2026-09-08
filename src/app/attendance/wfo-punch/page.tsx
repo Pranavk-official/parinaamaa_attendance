@@ -11,14 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CheckCircle2, Clock, ShieldAlert, ShieldOff } from "lucide-react";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { CheckCircle2, Clock, ShieldAlert } from "lucide-react";
 
 export const metadata: Metadata = { title: "Office Punch" };
 export const dynamic = "force-dynamic";
@@ -27,21 +20,8 @@ export default async function WfoPunchPage() {
   const user = await getCurrentUser();
   // Ensure a valid session exists even after middleware; paranoia is cheap here.
   if (!user) redirect("/login?callbackUrl=/attendance/wfo-punch");
-  if (isLeaveExempt(user)) {
-    return (
-      <PageShell>
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <ShieldOff />
-            </EmptyMedia>
-            <EmptyTitle>Nothing to punch</EmptyTitle>
-            <EmptyDescription>Admin accounts do not record attendance.</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </PageShell>
-    );
-  }
+  // Admin accounts record no attendance, so a stray scan just goes home.
+  if (isLeaveExempt(user)) redirect("/");
 
   const headerList = await headers();
   const forwarded = headerList.get("x-forwarded-for") ?? headerList.get("x-real-ip");

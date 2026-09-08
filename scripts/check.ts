@@ -1,5 +1,6 @@
 // One-run sanity check for fiscal year + leave day math.
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
 import {
   fiscalYear,
   countDays,
@@ -84,5 +85,23 @@ assert.ok(rejectMailBody(decision).includes("[reason for declining]"));
 assert.ok(rejectMailBody(decision).startsWith("Dear Dev Patel,"));
 // A single date reads as one date, not a range.
 assert.ok(rejectMailSubject({ ...decision, endDate: decision.startDate }).endsWith("2026-09-14"));
+
+// The import template's header must match the columns the parser reads.
+const templateHeader = readFileSync("src/components/users-import.tsx", "utf8")
+  .match(/"(name,email,[^"]+)"/)?.[1]
+  ?.split(",") ?? [];
+for (const column of [
+  "name",
+  "email",
+  "password",
+  "designation",
+  "role",
+  "salary",
+  "salaryBasis",
+  "paidPerMonth",
+  "compensatory",
+]) {
+  assert.ok(templateHeader.includes(column), `template is missing ${column}`);
+}
 
 console.log("fiscal checks passed");

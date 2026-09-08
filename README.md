@@ -280,6 +280,33 @@ before it leaves. Requests and rejections come with a drafted message that the
 sender can edit in an accordion before sending; anything the form has not filled
 in shows as a `[square bracket placeholder]`.
 
+### Installing it (PWA)
+
+The app installs to a home screen or desktop. `@ducanh2912/next-pwa` generates
+the service worker into `public/` at build time — it is **disabled in
+development**, so installability can only be checked against a production
+build.
+
+`InstallPrompt` shows a dismissible banner:
+
+- **Chrome, Edge, Android** — the browser fires `beforeinstallprompt`, which the
+  banner defers so it can offer its own Install button.
+- **iOS Safari** — never fires that event, so the banner shows the Share → "Add
+  to Home Screen" steps instead.
+- Already installed, or dismissed once, and it never appears again. Dismissal
+  lives in `localStorage`.
+
+`src/app/manifest.ts` is the manifest — Next's own file convention, so it is
+type-checked and served at `/manifest.webmanifest` with the `<link>` injected
+automatically. It carries the icons (`any` and `maskable` as separate entries,
+as Chrome expects), a `scope`, an `id`, and shortcuts to Apply Leave and My
+Leave. iOS ignores the manifest, so the apple-specific icon, title, and
+standalone opt-in live in `src/app/layout.tsx`.
+
+`next.config.ts` sets the headers Next's PWA guide asks for. The important one
+is `Cache-Control: no-cache, no-store, must-revalidate` on `/sw.js`: without it
+browsers keep running a stale service worker after a deploy.
+
 ### Payroll export
 
 `GET /api/export/payroll?format=csv|xlsx&month=YYYY-MM` — needs

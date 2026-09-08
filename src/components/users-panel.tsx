@@ -276,7 +276,11 @@ function CreateUserDialog({
             </Field>
             <Field>
               <FieldLabel>Role</FieldLabel>
-              <Select value={roleId} onValueChange={(v) => v && setRoleId(v)}>
+              <Select
+                value={roleId}
+                onValueChange={(v) => v && setRoleId(v)}
+                items={roles.map((r) => ({ value: r.id, label: r.name }))}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
@@ -416,7 +420,11 @@ function EditUserDialog({
               </Field>
               <Field>
                 <FieldLabel>Role</FieldLabel>
-                <Select value={roleId} onValueChange={(v) => v && setRoleId(v)}>
+                <Select
+                value={roleId}
+                onValueChange={(v) => v && setRoleId(v)}
+                items={roles.map((r) => ({ value: r.id, label: r.name }))}
+              >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>

@@ -63,6 +63,12 @@ type FormValues = z.infer<typeof schema>;
 
 const LEAVE_TYPES: LeaveType[] = ["REGULAR", "PAID", "COMPENSATORY"];
 
+// Base UI's Select.Value prints the raw value, so the root needs the labels.
+const SESSIONS = [
+  { value: "MORNING", label: "Morning (9:30 AM - 2:00 PM)" },
+  { value: "AFTERNOON", label: "Afternoon (2:00 PM - 6:30 PM)" },
+] as const;
+
 export function LeaveForm({
   employeeName,
   designation,
@@ -265,6 +271,7 @@ export function LeaveForm({
               <Field>
                 <FieldLabel>Session</FieldLabel>
                 <Select
+                  items={SESSIONS}
                   value={halfDaySession ?? undefined}
                   onValueChange={(v) => {
                     if (!v) return;
@@ -275,8 +282,11 @@ export function LeaveForm({
                     <SelectValue placeholder="Morning or afternoon" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MORNING">Morning (9:30 AM - 2:00 PM)</SelectItem>
-                    <SelectItem value="AFTERNOON">Afternoon (2:00 PM - 6:30 PM)</SelectItem>
+                    {SESSIONS.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        {s.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FieldError
