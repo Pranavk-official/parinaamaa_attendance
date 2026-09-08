@@ -11,7 +11,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CheckCircle2, Clock, ShieldAlert } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, Clock, LayoutDashboard, ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { PunchWidget } from "@/components/punch-widget";
+import type { AttendanceType } from "@/generated/prisma/client";
 
 export const metadata: Metadata = { title: "Office Punch" };
 export const dynamic = "force-dynamic";
@@ -30,12 +34,21 @@ export default async function WfoPunchPage() {
   // scan punches in. Set it to the office's public IP to turn the guard on.
   const officeIp = process.env.OFFICE_IP_ADDRESS;
 
-  let result: { alreadyPunched: boolean; type?: string; error?: string } | null = null;
+  let result: {
+    alreadyPunched: boolean;
+    type?: string;
+    punchedOut?: boolean;
+    error?: string;
+  } | null = null;
   if (officeIp && clientIp !== officeIp) {
     result = { alreadyPunched: false, error: "Not on the office network. WFO punch rejected." };
   } else {
     const res = await punchIn(user.id, "WFO");
-    result = { alreadyPunched: res.alreadyPunched, type: res.attendance.type };
+    result = {
+      alreadyPunched: res.alreadyPunched,
+      type: res.attendance.type,
+      punchedOut: res.attendance.punchOut !== null,
+    };
   }
 
   return (
@@ -60,9 +73,24 @@ export default async function WfoPunchPage() {
             icon={Clock}
             tone="text-muted-foreground"
             title="Already punched in today"
-            detail="Open your dashboard to punch out."
+            detail="Your entry for today is already recorded."
           />
         )}
+
+        {/* Punching out from here saves a trip back to the dashboard, which is
+            where the QR used to leave people stranded. */}
+        {result.type && (
+          <PunchWidget
+            type={result.type as AttendanceType}
+            punchedOut={result.punchedOut ?? false}
+          />
+        )}
+
+        <Button variant="outline" render={<Link href="/" />}>
+          <LayoutDashboard />
+          Go to dashboard
+        </Button>
+
         <p className="text-xs text-muted-foreground">
           One attendance entry is kept per day; refreshing will not create duplicates.
         </p>

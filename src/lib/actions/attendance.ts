@@ -19,5 +19,9 @@ export async function punchOutAction() {
   const result = await punchOut(user.id);
   if (result.error) return { error: result.error };
   revalidatePath("/");
-  return { ok: true as const };
+  return {
+    ok: true as const,
+    compensatoryEarned: result.compensatoryEarned ?? 0,
+    halfDay: result.halfDay ?? false,
+  };
 }

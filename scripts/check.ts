@@ -8,7 +8,7 @@ import {
   remainingDays,
   unpaidDeduction,
 } from "../src/lib/fiscal";
-import { resolveLeaveType } from "../src/lib/leave-policy";
+import { compensatoryEarned, leftEarly, resolveLeaveType } from "../src/lib/leave-policy";
 import {
   leaveMailBody,
   leaveMailSubject,
@@ -103,5 +103,16 @@ for (const column of [
 ]) {
   assert.ok(templateHeader.includes(column), `template is missing ${column}`);
 }
+
+// Working an off day earns compensatory leave by the hours actually worked.
+assert.equal(compensatoryEarned(9), 1); // full 09:30-18:30 shift
+assert.equal(compensatoryEarned(4.5), 1); // half the shift still rounds up to a day
+assert.equal(compensatoryEarned(4.49), 0.5);
+assert.equal(compensatoryEarned(0.9), 0); // punched straight back out
+
+// Leaving before the 14:00 session boundary is a half day; after it is not.
+assert.equal(leftEarly(new Date(2026, 8, 7, 13, 59)), true);
+assert.equal(leftEarly(new Date(2026, 8, 7, 14, 0)), false);
+assert.equal(leftEarly(new Date(2026, 8, 7, 18, 30)), false);
 
 console.log("fiscal checks passed");

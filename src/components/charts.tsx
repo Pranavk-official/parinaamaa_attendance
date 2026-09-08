@@ -59,7 +59,7 @@ export function DailySplitChart({
   }
 
   return (
-    <ChartContainer config={dailyConfig} className="mx-auto aspect-square max-h-[260px]">
+    <ChartContainer config={dailyConfig} className="mx-auto aspect-square max-h-64">
       <PieChart>
         <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
         <Pie data={slices} dataKey="value" nameKey="name" innerRadius={55} strokeWidth={2}>
@@ -98,7 +98,7 @@ export function MonthlyLeaveChart({
   }
 
   return (
-    <ChartContainer config={leaveConfig} className="max-h-[260px] w-full">
+    <ChartContainer config={leaveConfig} className="max-h-64 w-full">
       <BarChart data={data} accessibilityLayer>
         <CartesianGrid vertical={false} />
         <XAxis

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { FileDown, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -32,16 +32,21 @@ function recentMonths() {
   });
 }
 
-export function ReportExport() {
+export function ReportExport({ month }: { month: string }) {
+  const router = useRouter();
   const months = recentMonths();
-  const [month, setMonth] = useState(months[0].value);
   const href = (format: "csv" | "xlsx") => `/api/export/payroll?format=${format}&month=${month}`;
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
       <Field className="sm:max-w-56">
         <FieldLabel htmlFor="report-month">Month</FieldLabel>
-        <Select value={month} onValueChange={(v) => v && setMonth(v)}>
+        {/* The month lives in the URL so the table below re-renders with it. */}
+        <Select
+          items={months}
+          value={month}
+          onValueChange={(v) => v && router.replace(`/reports?month=${v}`)}
+        >
           <SelectTrigger id="report-month">
             <SelectValue />
           </SelectTrigger>

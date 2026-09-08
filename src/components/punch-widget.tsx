@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { QrScanner } from "@/components/qr-scanner";
 import { wfhPunchInAction, punchOutAction } from "@/lib/actions/attendance";
 import type { AttendanceType } from "@/generated/prisma/client";
 
@@ -85,26 +87,56 @@ export function PunchWidget({
   type: AttendanceType | null;
   punchedOut: boolean;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
+  // The props come from the server, so the card would otherwise keep showing
+  // the pre-punch state until the refresh lands — on a phone that reads as a
+  // missing button. The punch itself already told us the answer.
+  const [punched, setPunched] = useState<{
+    type: AttendanceType | null;
+    punchedOut: boolean;
+  } | null>(null);
+  const today = punched ?? { type, punchedOut };
 
   // Punched in already (WFO from the office QR, or WFH here): the only
   // remaining action is punching out. Never offer a second punch-in.
-  if (type) {
+  if (today.type) {
     return (
       <div className="flex flex-col gap-2">
-        <p className="text-sm text-muted-foreground">{TYPE_LABEL[type]}</p>
-        {!punchedOut && (
+        <p className="text-sm text-muted-foreground">{TYPE_LABEL[today.type]}</p>
+        {!today.punchedOut && (
           <PunchButton
             label="Punch Out"
             variant="outline"
             title="Punch out for today?"
-            description="This closes today's attendance. You cannot punch back in afterwards."
+            description={
+              today.type === "OFFDAY_WORK"
+                ? "Closes the day and credits your compensatory leave. You cannot punch back in."
+                : "Closes the day; you cannot punch back in. Before 2:00 PM it counts as a half day and the afternoon goes to your manager."
+            }
             pending={pending}
             run={() =>
               startTransition(async () => {
                 const res = await punchOutAction();
-                if (res.error) toast.error(res.error);
-                else toast.success("Punched out");
+                if (res.error) {
+                  toast.error(res.error);
+                  return;
+                }
+                setPunched({ type: today.type, punchedOut: true });
+                router.refresh();
+                if (res.halfDay) {
+                  toast.success(
+                    "Punched out — half day recorded, sent to your manager for approval."
+                  );
+                } else if (res.compensatoryEarned) {
+                  toast.success(
+                    `Punched out — ${res.compensatoryEarned} compensatory day${
+                      res.compensatoryEarned === 1 ? "" : "s"
+                    } earned.`
+                  );
+                } else {
+                  toast.success("Punched out");
+                }
               })
             }
           />
@@ -118,19 +150,24 @@ export function PunchWidget({
       <PunchButton
         label="Punch In (WFH)"
         title="Punch in as working from home?"
-        description="Today is recorded as WFH and cannot be changed. Scan the entrance QR instead if you are at the office."
+        description="Today is recorded as working from home and cannot be changed."
         pending={pending}
         run={() =>
           startTransition(async () => {
             const res = await wfhPunchInAction();
-            if (res.error) toast.error(res.error);
-            else toast.success(`Punched in (${res.type})`);
+            if (res.error) {
+              toast.error(res.error);
+              return;
+            }
+            setPunched({ type: res.type ?? "WFH", punchedOut: false });
+            router.refresh();
+            toast.success(`Punched in (${res.type})`);
           })
         }
       />
-      <p className="text-xs text-muted-foreground">
-        Punching in from the office? Scan the entrance QR instead.
-      </p>
+      {/* Already signed in: scanning the entrance QR punches in for WFO without
+          a trip through the login page. */}
+      <QrScanner />
     </div>
   );
 }

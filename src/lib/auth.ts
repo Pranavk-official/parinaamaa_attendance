@@ -13,7 +13,9 @@ export const auth = betterAuth({
   },
   session: {
     expiresIn: 60 * 60 * 24 * 30, // 30 days (admin & super admin stay signed in)
-    updateAge: 60 * 60 * 24, // 1 day
+    // Sliding window: two hours of activity pushes the expiry out again, up to
+    // the 7- or 30-day ceiling above.
+    updateAge: 60 * 60 * 2,
   },
   user: {
     additionalFields: {

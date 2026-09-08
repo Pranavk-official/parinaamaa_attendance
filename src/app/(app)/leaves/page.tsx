@@ -59,7 +59,7 @@ function rowFor(l: LeaveRow, canManage: boolean, showEmployee: boolean, viewerId
   const days = countDays(l.startDate, l.endDate, l.isHalfDay);
   return (
     <TableRow key={l.id}>
-      <TableCell className="whitespace-nowrap font-medium">
+      <TableCell data-label="Type" className="whitespace-nowrap font-medium">
         {l.type.replaceAll("_", " ")}
         {l.isHalfDay && (
           <span className="font-normal text-muted-foreground">
@@ -68,19 +68,23 @@ function rowFor(l: LeaveRow, canManage: boolean, showEmployee: boolean, viewerId
           </span>
         )}
       </TableCell>
-      {showEmployee && <TableCell>{l.user.name}</TableCell>}
-      <TableCell className="text-muted-foreground">
+      {showEmployee && <TableCell data-label="Employee">{l.user.name}</TableCell>}
+      <TableCell data-label="Start" className="text-muted-foreground">
         {iso(l.startDate)}
-        <span className="md:hidden"> → {iso(l.endDate)}</span>
       </TableCell>
-      <TableCell className="hidden text-muted-foreground md:table-cell">
+      <TableCell data-label="End" className="hidden text-muted-foreground md:table-cell">
         {iso(l.endDate)}
       </TableCell>
-      <TableCell className="text-right tabular-nums">{days}</TableCell>
-      <TableCell className="hidden max-w-[220px] truncate text-muted-foreground lg:table-cell">
+      <TableCell data-label="Days" className="text-right tabular-nums">
+        {days}
+      </TableCell>
+      <TableCell
+        data-label="Reason"
+        className="hidden max-w-56 truncate text-muted-foreground lg:table-cell"
+      >
         {l.reason}
       </TableCell>
-      <TableCell>
+      <TableCell data-label="Status">
         <Badge variant="secondary" className={STATUS_CLASS[l.status]}>
           {l.status}
         </Badge>
@@ -160,7 +164,7 @@ export default async function LeavesPage() {
               </EmptyHeader>
             </Empty>
           ) : (
-            <Table>
+            <Table stacked>
               <TableHeader>
                 <TableRow>
                   <TableHead>Type</TableHead>

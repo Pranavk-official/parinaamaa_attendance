@@ -143,3 +143,99 @@
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * Stacked tables: below md a row becomes its own card. The header disappears
+ * and each cell shows the label its column carried. Cells hidden at this width
+ * in table mode come back here — a card has room for the whole row, which is
+ * the point. Cells with no label (actions) become the card footer.
+ */
+@media (width < 48rem) {
+  table[data-stacked] thead {
+    display: none;
+  }
+
+  table[data-stacked] tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  table[data-stacked] tr {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 0.75rem;
+  }
+
+  table[data-stacked] td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    border: 0;
+    padding: 0;
+    /* Label left, value right — the card reads as pairs. */
+    text-align: right;
+    /* Undo the table-mode truncation: a card can wrap. */
+    max-width: none;
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+  }
+
+  table[data-stacked] td::before {
+    content: attr(data-label);
+    flex: none;
+    text-align: left;
+    color: var(--muted-foreground);
+    font-weight: 400;
+  }
+
+  /* The leading cell is the card's title: full width, no label — a name needs
+     no "Name:" in front of it — and ruled off from the fields below. */
+  table[data-stacked] td:first-child {
+    display: block;
+    margin-bottom: 0.25rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    text-align: left;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  table[data-stacked] td:first-child::before {
+    content: none;
+  }
+
+  /* An empty cell — a spacer, or an actions column with nothing in it — would
+     otherwise leave a blank line in the card. */
+  table[data-stacked] td:empty {
+    display: none;
+  }
+
+  /* Actions carry no label: they become a footer, ruled off, with the buttons
+     sharing the width evenly. */
+  table[data-stacked] td:not([data-label]):not(:first-child) {
+    margin-top: 0.25rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.75rem;
+  }
+
+  table[data-stacked] td:not([data-label]):not(:first-child) > * {
+    display: flex;
+    flex: 1;
+    justify-content: stretch;
+    gap: 0.5rem;
+  }
+
+  table[data-stacked] td:not([data-label]):not(:first-child) > * > * {
+    flex: 1;
+  }
+
+  table[data-stacked] td:not([data-label]):not(:first-child) button {
+    flex: 1;
+  }
+}

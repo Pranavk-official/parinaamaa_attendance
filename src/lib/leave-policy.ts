@@ -1,3 +1,14 @@
+import type { Prisma } from "@/generated/prisma/client";
+
+/**
+ * Tracked staff: everyone who is not leave-exempt. Payroll, reports and the
+ * org dashboard all count these and nobody else.
+ */
+export const EMPLOYEE_WHERE: Prisma.UserWhereInput = {
+  isSuperAdmin: false,
+  OR: [{ roleId: null }, { role: { permissions: { isEmpty: true } } }],
+};
+
 export type LeaveExemptSubject = {
   isSuperAdmin: boolean;
   role: { permissions: string[] } | null;
@@ -31,4 +42,26 @@ export function resolveLeaveType(
 ): "PAID" | "REGULAR" | "COMPENSATORY" {
   if (requested === "COMPENSATORY") return "COMPENSATORY";
   return paidRemaining >= requestedDays ? "PAID" : "REGULAR";
+}
+
+// Office hours are 09:30 to 18:30, Monday to Friday. Anything worked outside
+// that — a weekend, or a CompanyHoliday — is recorded as OFFDAY_WORK.
+export const WORK_DAY_HOURS = 9;
+
+/**
+ * Compensatory days earned by working one off day. A full shift earns a day,
+ * a short one earns half, and a punch pair too brief to be real work earns
+ * nothing.
+ */
+export function compensatoryEarned(hoursWorked: number): number {
+  if (hoursWorked < 1) return 0;
+  return hoursWorked < WORK_DAY_HOURS / 2 ? 0.5 : 1;
+}
+
+/** Half days split at 14:00: morning is 09:30-14:00, afternoon 14:00-18:30. */
+export const AFTERNOON_START_HOUR = 14;
+
+/** Punching out before the afternoon starts means only the morning was worked. */
+export function leftEarly(punchOutAt: Date): boolean {
+  return punchOutAt.getHours() < AFTERNOON_START_HOUR;
 }

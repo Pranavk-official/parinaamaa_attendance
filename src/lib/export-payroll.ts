@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { countDays, unpaidDeduction } from "@/lib/fiscal";
-import { isUnpaidLeave } from "@/lib/leave-policy";
+import { EMPLOYEE_WHERE, isUnpaidLeave } from "@/lib/leave-policy";
 
 export type PayrollRow = {
   name: string;
@@ -14,6 +14,7 @@ export type PayrollRow = {
   unpaidLeaveDays: number;
   monthlyGross: number | null;
   unpaidDeduction: number | null;
+  netPayable: number | null;
   leaveTypes: string;
 };
 
@@ -28,6 +29,7 @@ const HEADERS = [
   "unpaid_leave_days",
   "monthly_gross",
   "unpaid_deduction",
+  "net_payable",
   "leave_types",
 ];
 
@@ -44,6 +46,7 @@ function cells(r: PayrollRow) {
     r.unpaidLeaveDays,
     r.monthlyGross ?? "",
     r.unpaidDeduction ?? "",
+    r.netPayable ?? "",
     r.leaveTypes,
   ];
 }
@@ -82,6 +85,10 @@ export async function collectPayrollRows(monthKey?: string) {
 
   const [users, attendances, leaveRequests] = await Promise.all([
     prisma.user.findMany({
+      // Admins and super admins draw no attendance and no leave, so they are
+      // not payroll rows.
+      where: EMPLOYEE_WHERE,
+      orderBy: { name: "asc" },
       select: {
         id: true,
         name: true,
@@ -126,6 +133,10 @@ export async function collectPayrollRows(monthKey?: string) {
       u.salary === null
         ? null
         : Number(u.salary) / (u.salaryBasis === "ANNUAL" ? 12 : 1);
+    const deduction =
+      monthlyGross === null
+        ? null
+        : unpaidDeduction(monthlyGross, unpaidLeaveDays, daysInMonth);
     const totalHours = att.reduce(
       (acc, a) => acc + (a.punchOut ? hoursBetween(a.punchIn, a.punchOut) : 0),
       0
@@ -143,10 +154,10 @@ export async function collectPayrollRows(monthKey?: string) {
       ),
       unpaidLeaveDays,
       monthlyGross: monthlyGross === null ? null : Math.round(monthlyGross * 100) / 100,
-      unpaidDeduction:
-        monthlyGross === null
-          ? null
-          : unpaidDeduction(monthlyGross, unpaidLeaveDays, daysInMonth),
+      unpaidDeduction: deduction,
+      // What payroll actually pays out for the month.
+      netPayable:
+        monthlyGross === null ? null : Math.round((monthlyGross - (deduction ?? 0)) * 100) / 100,
       leaveTypes: leaves
         .map((l) =>
           l.halfDaySession ? `${l.type} ${l.halfDaySession.toLowerCase()}` : l.type

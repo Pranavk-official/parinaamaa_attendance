@@ -501,7 +501,7 @@ export function UsersPanel({
         </CardAction>
       </CardHeader>
       <CardContent>
-      <Table>
+      <Table stacked>
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
@@ -515,22 +515,22 @@ export function UsersPanel({
         <TableBody>
           {users.map((u) => (
             <TableRow key={u.id}>
-              <TableCell className="font-medium">
+              <TableCell data-label="Name" className="font-medium">
                 {u.name}
                 {u.id === currentUserId && (
                   <span className="ml-2 font-normal text-muted-foreground">(you)</span>
                 )}
                 <span className="block font-normal text-muted-foreground">{u.email}</span>
               </TableCell>
-              <TableCell className="hidden text-muted-foreground md:table-cell">
+              <TableCell data-label="Designation" className="hidden text-muted-foreground md:table-cell">
                 {u.designation ?? "—"}
               </TableCell>
-              <TableCell>
+              <TableCell data-label="Role">
                 <Badge variant={u.isSuperAdmin ? "default" : "secondary"}>
                   {u.role?.name ?? (u.isSuperAdmin ? "Super Admin" : "—")}
                 </Badge>
               </TableCell>
-              <TableCell className="hidden whitespace-nowrap tabular-nums md:table-cell">
+              <TableCell data-label="Salary" className="hidden whitespace-nowrap tabular-nums md:table-cell">
                 {u.salary === null ? (
                   <span className="text-muted-foreground">—</span>
                 ) : (
@@ -542,7 +542,7 @@ export function UsersPanel({
                   </>
                 )}
               </TableCell>
-              <TableCell className="hidden lg:table-cell">
+              <TableCell data-label="Leave" className="hidden lg:table-cell">
                 <div className="flex flex-wrap gap-1.5">
                   {u.leaveBalances.length === 0 && (
                     <span className="text-muted-foreground">None</span>

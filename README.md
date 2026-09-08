@@ -214,8 +214,20 @@ blocked by a balance check. Employees are the tracked staff.
 - **WFO** — scan the office QR, which opens `/attendance/wfo-punch`. If
   `OFFICE_IP_ADDRESS` is set, the punch only succeeds from that IP.
 - **WFH** — the punch widget on the dashboard.
-- **Offday work** — any punch on a Saturday, Sunday or a row in
-  `CompanyHoliday` is recorded as offday work automatically.
+- **Offday work** — office hours are 09:30 to 18:30, Monday to Friday, so any
+  punch on a Saturday, Sunday or a row in `CompanyHoliday` is recorded as offday
+  work automatically. Punching out on such a day credits compensatory leave:
+
+  | Hours worked | Compensatory earned |
+  | --- | --- |
+  | under 1 | none — a punch pair that brief is not real work |
+  | 1 to 4.5 | half a day |
+  | 4.5 or more | a full day |
+
+  The credit lands on punch-out, once per day, and raises the `COMPENSATORY`
+  balance for the fiscal year the day falls in. Leave-exempt staff carry no
+  balances, so they earn nothing. The thresholds live in `compensatoryEarned`
+  in `src/lib/leave-policy.ts`.
 
 `CompanyHoliday` has no admin screen yet; add rows directly in the database.
 
@@ -252,6 +264,27 @@ the URL above.
 One record per person per day. Punching is one-way: there is no second punch-in,
 so both punch buttons confirm first.
 
+Punching out **before 14:00** on a working day means only the morning was
+worked. The afternoon is filed as a half-day leave request — `PENDING`, so a
+manager still decides — paid while the paid balance lasts and unpaid `REGULAR`
+once it runs out, exactly as a hand-filed request would be. The boundary is
+`leftEarly` in `src/lib/leave-policy.ts`.
+
+Signed-in employees can scan the entrance QR straight from the dashboard, so
+punching in as WFO does not mean going back through the login page.
+
+### Sessions
+
+| Who | Sign-in lasts | Refresh |
+| --- | --- | --- |
+| Employee | 7 days | every 2 hours of activity |
+| Admin, Super Admin | 30 days | every 2 hours of activity |
+
+Better Auth slides the expiry forward on activity, so an active session keeps
+renewing up to its ceiling and an idle one falls off at it. The ceilings are set
+in the session-create hook in `src/lib/auth.ts`; the 2-hour refresh is
+`session.updateAge`.
+
 ### Leave
 
 Three types. A half day is a checkbox on any of them, never a type of its own.
@@ -259,7 +292,7 @@ Three types. A half day is a checkbox on any of them, never a type of its own.
 | Type | Balance | Notes |
 | --- | --- | --- |
 | `PAID` | accrues per month, in whole days | A half day draws 0.5 from it. |
-| `COMPENSATORY` | annual lump | Set by an admin; not credited automatically for offday work. |
+| `COMPENSATORY` | earned | Credited automatically for offday work — see below. An admin can still top it up. |
 | `REGULAR` | none | Unpaid. Uncapped. Deducted from salary. |
 
 The paid balance decides the rest. Whichever type the employee picks, the

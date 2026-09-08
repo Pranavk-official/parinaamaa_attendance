@@ -135,7 +135,7 @@ export function QrScanner() {
       </Dialog>
       {!open && error && <p className="text-sm text-destructive">{error}</p>}
       <p className="text-center text-xs text-muted-foreground">
-        At the office? Scan the entrance QR, then sign in to punch.
+        At the office? Scan the entrance QR to punch in as WFO.
       </p>
     </div>
   );

@@ -3,7 +3,18 @@
 import * as React from "react"
 import { cn } from "cn"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  stacked,
+  ...props
+}: React.ComponentProps<"table"> & {
+  /**
+   * Below `md`, collapse each row into its own card. Every `TableCell` then
+   * needs a `data-label`, which the card shows in place of the column header.
+   * See the `table[data-stacked]` rules in globals.css.
+   */
+  stacked?: boolean
+}) {
   return (
     <div
       data-slot="table-container"
@@ -11,6 +22,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     >
       <table
         data-slot="table"
+        data-stacked={stacked ? "" : undefined}
         className={cn("w-full caption-bottom text-xs", className)}
         {...props}
       />
@@ -69,7 +81,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

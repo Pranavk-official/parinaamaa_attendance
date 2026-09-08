@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { version } from "../../package.json";
 import {
@@ -17,7 +17,9 @@ import {
   Shield,
   Users,
 } from "lucide-react";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
+import { punchOutAction } from "@/lib/actions/attendance";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -27,6 +29,7 @@ import {
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -90,38 +93,68 @@ function initials(name: string) {
 function SignOutDialog({
   open,
   onOpenChange,
+  canPunchOut,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canPunchOut: boolean;
 }) {
   const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  const signOut = () =>
+    authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          router.push("/login");
+          router.refresh();
+        },
+      },
+    });
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Sign out?</AlertDialogTitle>
           <AlertDialogDescription>
-            You will need to sign in again to access your account.
+            {canPunchOut
+              ? "You are still punched in for today. Sign out on its own leaves the day open."
+              : "You will need to sign in again to access your account."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
           <AlertDialogAction
-            variant="destructive"
+            variant={canPunchOut ? "outline" : "destructive"}
+            disabled={pending}
             onClick={() => {
               onOpenChange(false);
-              authClient.signOut({
-                fetchOptions: {
-                  onSuccess: () => {
-                    router.push("/login");
-                    router.refresh();
-                  },
-                },
-              });
+              signOut();
             }}
           >
             Sign out
           </AlertDialogAction>
+          {canPunchOut && (
+            <AlertDialogAction
+              variant="destructive"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const res = await punchOutAction();
+                  if (res.error) {
+                    toast.error(res.error);
+                    return;
+                  }
+                  onOpenChange(false);
+                  signOut();
+                })
+              }
+            >
+              {pending && <Spinner />}
+              Punch out and sign out
+            </AlertDialogAction>
+          )}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -191,7 +224,7 @@ function NavUser({
 function bottomNavItemClass(active: boolean) {
   return cn(
     // min-h-14 keeps the tap target at/above the 44px minimum.
-    "relative h-auto min-h-14 min-w-0 flex-1 flex-col gap-1 rounded-none px-1 py-2 text-[0.6875rem] font-normal",
+    "relative h-auto min-h-14 min-w-0 flex-1 flex-col gap-1 rounded-none px-1 py-2 text-xs font-normal",
     "before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:bg-primary before:transition-opacity",
     active ? "text-primary before:opacity-100" : "text-muted-foreground before:opacity-0",
   );
@@ -261,6 +294,7 @@ export function Nav({
   name,
   email,
   isEmployee,
+  canPunchOut,
   canManageUsers,
   canViewReports,
   children,
@@ -268,6 +302,7 @@ export function Nav({
   name: string;
   email: string;
   isEmployee: boolean;
+  canPunchOut: boolean;
   canManageUsers: boolean;
   canViewReports: boolean;
   children: React.ReactNode;
@@ -371,7 +406,7 @@ export function Nav({
           <div className="rounded-md border border-sidebar-border group-data-[collapsible=icon]:border-transparent">
             <NavUser name={name} email={email} onSignOut={() => setSigningOut(true)} />
           </div>
-          <p className="px-2 pb-1 text-center text-[0.6875rem] text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">
+          <p className="px-2 pb-1 text-center text-xs text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">
             Version {version}
           </p>
         </SidebarFooter>
@@ -406,7 +441,7 @@ export function Nav({
       </SidebarInset>
 
       <BottomNav items={items} pathname={pathname} showMore={showMore} />
-      <SignOutDialog open={signingOut} onOpenChange={setSigningOut} />
+      <SignOutDialog open={signingOut} onOpenChange={setSigningOut} canPunchOut={canPunchOut} />
     </SidebarProvider>
   );
 }

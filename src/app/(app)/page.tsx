@@ -36,9 +36,13 @@ import { PageHeader } from "@/components/page-header";
 import { PunchWidget } from "@/components/punch-widget";
 import { DailySplitChart, MonthlyLeaveChart } from "@/components/charts";
 import { mustUser, type CurrentUser } from "@/lib/auth-user";
-import { ALLOCATABLE_LEAVE_TYPES, isLeaveExempt, isUnpaidLeave } from "@/lib/leave-policy";
+import {
+  ALLOCATABLE_LEAVE_TYPES,
+  EMPLOYEE_WHERE,
+  isLeaveExempt,
+  isUnpaidLeave,
+} from "@/lib/leave-policy";
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@/generated/prisma/client";
 import { fiscalYear, monthsElapsedInFiscalYear, toDateOnly, countDays } from "@/lib/fiscal";
 
 function iso(d: Date) {
@@ -53,12 +57,6 @@ function monthStart() {
   const now = new Date();
   return toDateOnly(new Date(now.getFullYear(), now.getMonth(), 1));
 }
-
-/** Employees are the tracked staff: everyone who is not leave-exempt. */
-const EMPLOYEE_WHERE: Prisma.UserWhereInput = {
-  isSuperAdmin: false,
-  OR: [{ roleId: null }, { role: { permissions: { isEmpty: true } } }],
-};
 
 function StatCard({
   label,
@@ -199,7 +197,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
               </EmptyHeader>
             </Empty>
           ) : (
-            <Table>
+            <Table stacked>
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead>
@@ -211,14 +209,19 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
               <TableBody>
                 {pendingRequests.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="font-medium">{r.user.name}</TableCell>
-                    <TableCell>
+                    <TableCell data-label="Employee" className="font-medium">
+                      {r.user.name}
+                    </TableCell>
+                    <TableCell data-label="Type">
                       <Badge variant="secondary">{r.type.replaceAll("_", " ")}</Badge>
                     </TableCell>
-                    <TableCell className="hidden text-muted-foreground sm:table-cell">
+                    <TableCell
+                      data-label="Dates"
+                      className="hidden text-muted-foreground sm:table-cell"
+                    >
                       {iso(r.startDate)} → {iso(r.endDate)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell data-label="Days" className="text-right tabular-nums">
                       {countDays(r.startDate, r.endDate, r.isHalfDay).toFixed(1)}
                     </TableCell>
                   </TableRow>
@@ -246,7 +249,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
               </EmptyHeader>
             </Empty>
           ) : (
-            <Table>
+            <Table stacked>
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead>
@@ -258,7 +261,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
               <TableBody>
                 {todayAttendance.map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="font-medium">
+                    <TableCell data-label="Employee" className="font-medium">
                       {a.user.name}
                       {a.user.designation && (
                         <span className="ml-2 hidden font-normal text-muted-foreground sm:inline">
@@ -266,11 +269,16 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-label="Type">
                       <Badge variant="secondary">{a.type.replaceAll("_", " ")}</Badge>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{time(a.punchIn)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell data-label="In" className="text-right tabular-nums">
+                      {time(a.punchIn)}
+                    </TableCell>
+                    <TableCell
+                      data-label="Out"
+                      className="text-right tabular-nums text-muted-foreground"
+                    >
                       {a.punchOut ? time(a.punchOut) : "—"}
                     </TableCell>
                   </TableRow>
@@ -351,8 +359,8 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
         subtitle={`${user.designation ?? "Employee"} · ${today.toDateString()}`}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="sm:col-span-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card className="sm:col-span-2 lg:col-span-3">
           <CardHeader>
             <CardTitle>Today</CardTitle>
             <CardAction>

@@ -168,10 +168,8 @@ export function LeaveForm({
       <CardHeader>
         <CardTitle>Apply for leave</CardTitle>
         <CardDescription>
-          Requests notify your manager for approval. A half day is always 0.5 days and
-          can only be taken today or later. Your paid balance decides the rest: leave is
-          paid while paid days remain, and becomes unpaid regular leave — deducted from
-          salary — once they run out.
+          Your manager approves it. Paid while your paid balance lasts, unpaid after
+          that.
         </CardDescription>
       </CardHeader>
       <CardContent>
