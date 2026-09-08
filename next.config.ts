@@ -7,8 +7,8 @@ const withPWA = withPWAImport({
   register: true,
 });
 
-const nextConfig: NextConfig = {
-  output: "standalone",
-};
+// No "output: standalone": the image ships node_modules and runs `next start`,
+// which Next refuses to combine with a standalone build.
+const nextConfig: NextConfig = {};
 
 export default withPWA(nextConfig);

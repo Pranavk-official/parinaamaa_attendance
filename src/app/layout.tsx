@@ -10,6 +10,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
 export const metadata: Metadata = {
+  // Static pages bake this at build time, so the Dockerfile passes
+  // BETTER_AUTH_URL in as a build arg.
+  metadataBase: new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000"),
   title: { default: "Attendance", template: "%s · Attendance" },
   description: "Corporate attendance and leave tracker",
   manifest: "/manifest.webmanifest",

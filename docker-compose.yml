@@ -23,6 +23,8 @@ services:
     build:
       context: .
       target: prod
+      args:
+        BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
     restart: unless-stopped
     # One port for both sides: published on the host, and what Next listens on.
     ports:
