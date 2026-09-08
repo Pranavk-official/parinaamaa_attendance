@@ -11,10 +11,15 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d attendance"]
+      # -h 127.0.0.1 on purpose. Without it pg_isready checks the Unix socket,
+      # which the entrypoint's temporary init server answers before the real
+      # server listens on TCP — the container reports healthy, web starts, and
+      # Prisma gets P1001. Only the TCP check means "ready for a client".
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U postgres -d attendance"]
       interval: 5s
       timeout: 3s
       retries: 10
+      start_period: 30s
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }

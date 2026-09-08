@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { version } from "../../package.json";
 import {
   CalendarCheck,
   CalendarPlus,
@@ -50,6 +49,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import {
   Sidebar,
@@ -72,15 +78,13 @@ import {
 /** Bottom nav shows this many items; the rest live behind "More". */
 const BOTTOM_NAV_SLOTS = 4;
 
-/** A route, or an in-place action such as signing out. */
 type NavItem = {
   label: string;
+  href: string;
   /** Bottom-nav caption. A tab is ~1/5 of a phone's width, so long labels
       truncate there; give anything over ~7 characters a short form. */
   short?: string;
   icon: typeof LayoutDashboard;
-  href?: string;
-  onClick?: () => void;
 };
 
 type NavGroup = { label: string; items: NavItem[] };
@@ -234,28 +238,106 @@ function bottomNavItemClass(active: boolean) {
 }
 
 /**
- * Mobile app bar. "More" opens the sidebar sheet; it is rendered only when it
- * earns its slot — for something that overflows, or to give staff their only
- * mobile route to the account menu. Employees carry their own sign-out item,
- * so their four tabs are the whole nav.
+ * The overflow sheet behind the "More" tab: routes that did not fit, plus the
+ * account, theme and sign-out that a phone has no other route to. It opens
+ * upward from the tab that summons it, so origin and destination agree.
+ */
+function MoreSheet({
+  open,
+  onOpenChange,
+  items,
+  pathname,
+  name,
+  email,
+  onSignOut,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  items: NavItem[];
+  pathname: string;
+  name: string;
+  email: string;
+  onSignOut: () => void;
+}) {
+  const close = () => onOpenChange(false);
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="bottom"
+        className="gap-0 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:hidden"
+      >
+        <SheetHeader className="flex-row items-center gap-3 border-b p-4">
+          <Avatar>
+            <AvatarFallback>{initials(name)}</AvatarFallback>
+          </Avatar>
+          <div className="grid min-w-0 flex-1">
+            <SheetTitle className="truncate text-sm">{name}</SheetTitle>
+            <SheetDescription className="truncate">{email}</SheetDescription>
+          </div>
+        </SheetHeader>
+
+        <div className="flex flex-col p-2">
+          {items.map((item) => {
+            const Icon = item.icon;
+            const active = item.href === pathname;
+            return (
+              <Button
+                key={item.label}
+                variant="ghost"
+                onClick={close}
+                className={cn(
+                  "h-11 justify-start gap-3 rounded-none px-3 text-sm font-normal",
+                  active && "bg-accent text-accent-foreground",
+                )}
+                render={
+                  <Link href={item.href} aria-current={active ? "page" : undefined} />
+                }
+              >
+                <Icon className="size-5" />
+                {item.label}
+              </Button>
+            );
+          })}
+          <Button
+            variant="ghost"
+            className="h-11 justify-start gap-3 rounded-none px-3 text-sm font-normal"
+            onClick={() => {
+              close();
+              onSignOut();
+            }}
+          >
+            <LogOut className="size-5" />
+            Sign out
+          </Button>
+        </div>
+
+        <p className="px-4 text-center text-xs text-muted-foreground">Version {process.env.NEXT_PUBLIC_APP_VERSION}</p>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+/**
+ * The whole of mobile navigation: four routes plus "More". There is no drawer
+ * and no app bar behind it — one bar, one place to look, and the page's own
+ * <h1> is its title.
  */
 function BottomNav({
   items,
   pathname,
-  showMore,
+  onMore,
+  moreActive,
 }: {
   items: NavItem[];
   pathname: string;
-  showMore: boolean;
+  onMore: () => void;
+  moreActive: boolean;
 }) {
-  const { setOpenMobile } = useSidebar();
-  const primary = items.slice(0, showMore ? BOTTOM_NAV_SLOTS : BOTTOM_NAV_SLOTS + 1);
-  const overflow = items.slice(primary.length);
-
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden">
       <div className="flex items-stretch">
-        {primary.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           const active = item.href === pathname;
           return (
@@ -263,31 +345,23 @@ function BottomNav({
               key={item.label}
               variant="ghost"
               className={bottomNavItemClass(active)}
-              onClick={item.onClick}
-              {...(item.href
-                ? {
-                    render: (
-                      <Link href={item.href} aria-current={active ? "page" : undefined} />
-                    ),
-                  }
-                : {})}
+              render={
+                <Link href={item.href} aria-current={active ? "page" : undefined} />
+              }
             >
               <Icon className="size-5" />
               <span className="truncate">{item.short ?? item.label}</span>
             </Button>
           );
         })}
-        {showMore && (
-          <Button
-            variant="ghost"
-            aria-label="More"
-            className={bottomNavItemClass(overflow.some((i) => i.href === pathname))}
-            onClick={() => setOpenMobile(true)}
-          >
-            <Ellipsis className="size-5" />
-            <span className="truncate">More</span>
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          className={bottomNavItemClass(moreActive)}
+          onClick={onMore}
+        >
+          <Ellipsis className="size-5" />
+          <span className="truncate">More</span>
+        </Button>
       </div>
     </nav>
   );
@@ -312,6 +386,7 @@ export function Nav({
 }) {
   const pathname = usePathname();
   const [signingOut, setSigningOut] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   // Grouped for the sidebar; BottomNav flattens them back into tabs.
   const groups: NavGroup[] = [
@@ -346,22 +421,16 @@ export function Nav({
           },
         ]
       : []),
-    {
-      label: "Settings",
-      items: [
-        // Employees get a direct sign-out where staff get session management.
-        isEmployee
-          ? { label: "Log out", icon: LogOut, onClick: () => setSigningOut(true) }
-          : { href: "/security", label: "Security", icon: Shield },
-      ],
-    },
+    ...(isEmployee
+      ? []
+      : [{ label: "Settings", items: [{ href: "/security", label: "Security", icon: Shield }] }]),
   ];
   const items: NavItem[] = groups.flatMap((g) => g.items);
   const current = items.find((i) => i.href === pathname);
-  // Employees get every item as a tab plus their own sign-out, so "More" would
-  // open a sheet that shows them nothing new. Staff keep it: it is their only
-  // mobile route to the account menu.
-  const showMore = !isEmployee;
+  // Four tabs and a "More"; whatever does not fit joins the account, theme and
+  // sign-out in the sheet behind it.
+  const tabs = items.slice(0, BOTTOM_NAV_SLOTS);
+  const overflow = items.slice(BOTTOM_NAV_SLOTS);
 
   return (
     <SidebarProvider>
@@ -394,8 +463,7 @@ export function Nav({
                         <SidebarMenuButton
                           isActive={item.href === pathname}
                           tooltip={item.label}
-                          onClick={item.onClick}
-                          {...(item.href ? { render: <Link href={item.href} /> } : {})}
+                          render={<Link href={item.href} />}
                         >
                           <Icon />
                           <span>{item.label}</span>
@@ -415,7 +483,7 @@ export function Nav({
             <NavUser name={name} email={email} onSignOut={() => setSigningOut(true)} />
           </div>
           <p className="px-2 pb-1 text-center text-xs text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">
-            Version {version}
+            Version {process.env.NEXT_PUBLIC_APP_VERSION}
           </p>
         </SidebarFooter>
         <SidebarRail />
@@ -426,6 +494,7 @@ export function Nav({
       <SidebarInset className="min-w-0">
         <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b bg-background/85 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
           <div className="flex w-full items-center gap-2 px-4">
+            {/* No drawer to open on mobile, so the trigger is desktop-only. */}
             <SidebarTrigger className="-ml-1 hidden md:flex" />
             <Separator
               orientation="vertical"
@@ -448,7 +517,21 @@ export function Nav({
         </div>
       </SidebarInset>
 
-      <BottomNav items={items} pathname={pathname} showMore={showMore} />
+      <BottomNav
+        items={tabs}
+        pathname={pathname}
+        onMore={() => setMoreOpen(true)}
+        moreActive={overflow.some((i) => i.href === pathname)}
+      />
+      <MoreSheet
+        open={moreOpen}
+        onOpenChange={setMoreOpen}
+        items={overflow}
+        pathname={pathname}
+        name={name}
+        email={email}
+        onSignOut={() => setSigningOut(true)}
+      />
       <SignOutDialog open={signingOut} onOpenChange={setSigningOut} canPunchOut={canPunchOut} />
     </SidebarProvider>
   );
