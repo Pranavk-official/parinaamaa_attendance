@@ -150,8 +150,8 @@ scheduler. Then:
 - Set `PORT` to something free. Dokploy's own UI holds `3000`, and a clash
   there fails the deploy with `Bind for 0.0.0.0:3000 failed: port is already
   allocated`.
-- Attach a domain in the **Domains** tab, pointing at service `web` and
-  whatever `PORT` you chose.
+- Attach a domain in the **Domains** tab: service `web`, and the same container
+  port as `PORT`. Set `BETTER_AUTH_URL` to that host with its scheme.
 
 Once a domain routes through Traefik, the published host port earns nothing —
 delete the `ports:` block from the web service if you would rather not expose
@@ -179,9 +179,9 @@ dial — that is the `traefik.docker.network: dokploy-network` label on the
 service. Without it Traefik can pick `internal`, which its own container is not
 on, and every request 404s.
 
-If step 3 shows no `traefik.http.routers.*` labels, Dokploy did not inject
-them: re-save the domain in the Domains tab and redeploy. Dokploy's generated
-labels merge with the ones already in the file.
+Step 3 is the decisive one. No `traefik.http.routers.*` labels means Dokploy
+did not inject them — most likely because the service already carries a
+`labels:` block of its own, and the symptom is a silent 404.
 
 Postgres data lives in the `pgdata` volume. Back that up.
 
