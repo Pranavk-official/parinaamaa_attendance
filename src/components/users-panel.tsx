@@ -3,10 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Pencil, UserPlus, Wallet } from "lucide-react";
+import { Pencil, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -24,7 +26,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -32,11 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  createUserAction,
-  updateUserAction,
-  setLeaveBalanceAction,
-} from "@/lib/actions/users";
+import { createUserAction, updateUserAction } from "@/lib/actions/users";
 import { UsersImport } from "@/components/users-import";
 import { isLeaveExempt } from "@/lib/leave-policy";
 import type { LeaveType } from "@/generated/prisma/client";
@@ -48,12 +47,112 @@ type UserRow = {
   designation: string | null;
   isSuperAdmin: boolean;
   role: { id: string; name: string; permissions: string[] } | null;
+  salary: number | null;
+  annualSalary: boolean;
   leaveBalances: { leaveType: LeaveType; allocated: number; perMonth: number; used: number }[];
 };
 
-type RoleRow = { id: string; name: string };
+type RoleRow = { id: string; name: string; permissions: string[] };
 
-const LEAVE_TYPES: LeaveType[] = ["REGULAR", "PAID", "COMPENSATORY", "HALF_DAY"];
+const money = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+});
+
+/** Salary is either a monthly gross or an annual CTC; payroll derives the rest. */
+function SalaryFields({
+  idPrefix,
+  salary,
+  setSalary,
+  annual,
+  setAnnual,
+}: {
+  idPrefix: string;
+  salary: string;
+  setSalary: (v: string) => void;
+  annual: boolean;
+  setAnnual: (v: boolean) => void;
+}) {
+  return (
+    <>
+      <Field>
+        <FieldLabel htmlFor={`${idPrefix}-salary`}>Salary</FieldLabel>
+        <Input
+          id={`${idPrefix}-salary`}
+          type="number"
+          step="0.01"
+          min="0"
+          value={salary}
+          onChange={(e) => setSalary(e.target.value)}
+          placeholder="Leave blank if not recorded"
+        />
+      </Field>
+      <Field orientation="horizontal">
+        <Checkbox
+          id={`${idPrefix}-annual`}
+          checked={annual}
+          onCheckedChange={(c) => setAnnual(c === true)}
+        />
+        <FieldLabel htmlFor={`${idPrefix}-annual`} className="font-normal">
+          Annual CTC
+        </FieldLabel>
+      </Field>
+      <FieldDescription>
+        Unchecked means the figure is a monthly gross. Unpaid leave is deducted at the
+        monthly gross divided by the days in the payroll month.
+      </FieldDescription>
+    </>
+  );
+}
+
+/** Allocation is per fiscal year; REGULAR is unpaid and uncapped so it has none. */
+function LeaveAllocationFields({
+  idPrefix,
+  paidPerMonth,
+  setPaidPerMonth,
+  compensatory,
+  setCompensatory,
+}: {
+  idPrefix: string;
+  paidPerMonth: string;
+  setPaidPerMonth: (v: string) => void;
+  compensatory: string;
+  setCompensatory: (v: string) => void;
+}) {
+  return (
+    <>
+      <Field>
+        <FieldLabel htmlFor={`${idPrefix}-paid`}>Paid days per month</FieldLabel>
+        <Input
+          id={`${idPrefix}-paid`}
+          type="number"
+          step="1"
+          min="0"
+          value={paidPerMonth}
+          onChange={(e) => setPaidPerMonth(e.target.value)}
+          required
+        />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor={`${idPrefix}-comp`}>Compensatory days (annual)</FieldLabel>
+        <Input
+          id={`${idPrefix}-comp`}
+          type="number"
+          step="0.5"
+          min="0"
+          value={compensatory}
+          onChange={(e) => setCompensatory(e.target.value)}
+          required
+        />
+        <FieldDescription>
+          Paid leave is allocated in whole days and can be taken half a day at a time.
+          Regular leave is unpaid and uncapped, so it is never allocated.
+        </FieldDescription>
+      </Field>
+    </>
+  );
+}
 
 function CreateUserDialog({
   roles,
@@ -68,6 +167,12 @@ function CreateUserDialog({
   const [password, setPassword] = useState("");
   const [designation, setDesignation] = useState("");
   const [roleId, setRoleId] = useState(roles[0]?.id ?? "");
+  const [paidPerMonth, setPaidPerMonth] = useState("1");
+  const [compensatory, setCompensatory] = useState("0");
+  const [salary, setSalary] = useState("");
+  const [annual, setAnnual] = useState(false);
+  // Staff roles carry permissions; they are leave-exempt and get no allocation.
+  const exempt = (roles.find((r) => r.id === roleId)?.permissions.length ?? 0) > 0;
 
   const reset = () => {
     setName("");
@@ -75,11 +180,29 @@ function CreateUserDialog({
     setPassword("");
     setDesignation("");
     setRoleId(roles[0]?.id ?? "");
+    setPaidPerMonth("1");
+    setCompensatory("0");
+    setSalary("");
+    setAnnual(false);
   };
 
   const submit = () => {
     startTransition(async () => {
-      const res = await createUserAction({ name, email, password, designation, roleId });
+      const res = await createUserAction({
+        name,
+        email,
+        password,
+        designation,
+        roleId,
+        leave: {
+          paidPerMonth: Number(paidPerMonth),
+          compensatoryAllocated: Number(compensatory),
+        },
+        pay: {
+          salary: salary.trim() === "" ? null : Number(salary),
+          salaryBasis: annual ? "ANNUAL" : "MONTHLY",
+        },
+      });
       if (res.error) {
         toast.error(res.error);
         return;
@@ -105,8 +228,8 @@ function CreateUserDialog({
         <DialogHeader>
           <DialogTitle>Add user</DialogTitle>
           <DialogDescription>
-            Creates a new account with role and designation. The invitee must change their
-            password after first sign-in.
+            Creates a new account with role, designation, salary, and leave allocation.
+            The invitee must change their password after first sign-in.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -166,13 +289,29 @@ function CreateUserDialog({
                 </SelectContent>
               </Select>
             </Field>
+            <SalaryFields
+              idPrefix="nu"
+              salary={salary}
+              setSalary={setSalary}
+              annual={annual}
+              setAnnual={setAnnual}
+            />
+            {!exempt && (
+              <LeaveAllocationFields
+                idPrefix="nu"
+                paidPerMonth={paidPerMonth}
+                setPaidPerMonth={setPaidPerMonth}
+                compensatory={compensatory}
+                setCompensatory={setCompensatory}
+              />
+            )}
           </FieldGroup>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending && <Loader2 className="size-4 animate-spin" />}
+              {pending && <Spinner />}
               Create
             </Button>
           </DialogFooter>
@@ -203,25 +342,30 @@ function EditUserDialog({
   const [paidPerMonth, setPaidPerMonth] = useState(
     String(user.leaveBalances.find((b) => b.leaveType === "PAID")?.perMonth ?? 1),
   );
+  const [compensatory, setCompensatory] = useState(
+    String(user.leaveBalances.find((b) => b.leaveType === "COMPENSATORY")?.allocated ?? 0),
+  );
+  const [salary, setSalary] = useState(user.salary === null ? "" : String(user.salary));
+  const [annual, setAnnual] = useState(user.annualSalary);
 
   const submit = () => {
     startTransition(async () => {
-      const res = await updateUserAction(user.id, { name, designation, roleId });
+      const res = await updateUserAction(user.id, {
+        name,
+        designation,
+        roleId,
+        leave: {
+          paidPerMonth: Number(paidPerMonth),
+          compensatoryAllocated: Number(compensatory),
+        },
+        pay: {
+          salary: salary.trim() === "" ? null : Number(salary),
+          salaryBasis: annual ? "ANNUAL" : "MONTHLY",
+        },
+      });
       if (res.error) {
         toast.error(res.error);
         return;
-      }
-      if (!exempt) {
-        const bal = await setLeaveBalanceAction({
-          userId: user.id,
-          fiscalYear,
-          leaveType: "PAID",
-          perMonth: Number(paidPerMonth),
-        });
-        if (bal.error) {
-          toast.error(bal.error);
-          return;
-        }
       }
       toast.success("User updated");
       setOpen(false);
@@ -241,7 +385,9 @@ function EditUserDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit {user.name}</DialogTitle>
-          <DialogDescription>Update account details and role.</DialogDescription>
+          <DialogDescription>
+            Update account details, role, salary, and leave allocation for {fiscalYear}.
+          </DialogDescription>
         </DialogHeader>
         {!canEdit ? (
           <p className="text-sm text-muted-foreground">
@@ -283,19 +429,21 @@ function EditUserDialog({
                   </SelectContent>
                 </Select>
               </Field>
+              <SalaryFields
+                idPrefix="eu"
+                salary={salary}
+                setSalary={setSalary}
+                annual={annual}
+                setAnnual={setAnnual}
+              />
               {!exempt && (
-                <Field>
-                  <FieldLabel htmlFor="eu-paid">Paid days per month</FieldLabel>
-                  <Input
-                    id="eu-paid"
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    value={paidPerMonth}
-                    onChange={(e) => setPaidPerMonth(e.target.value)}
-                    required
-                  />
-                </Field>
+                <LeaveAllocationFields
+                  idPrefix="eu"
+                  paidPerMonth={paidPerMonth}
+                  setPaidPerMonth={setPaidPerMonth}
+                  compensatory={compensatory}
+                  setCompensatory={setCompensatory}
+                />
               )}
             </FieldGroup>
             <DialogFooter>
@@ -303,160 +451,12 @@ function EditUserDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={pending}>
-                {pending && <Loader2 className="size-4 animate-spin" />}
+                {pending && <Spinner />}
                 Save
               </Button>
             </DialogFooter>
           </form>
         )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function AllocateLeaveDialog({
-  user,
-  fiscalYear,
-}: {
-  user: UserRow;
-  fiscalYear: string;
-}) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const [leaveType, setLeaveType] = useState<LeaveType>("PAID");
-  const [allocated, setAllocated] = useState("0");
-  const [perMonth, setPerMonth] = useState("1");
-
-  const balance = user.leaveBalances.find((b) => b.leaveType === leaveType);
-  const isPaid = leaveType === "PAID";
-
-  const changeType = (v: string | null) => {
-    if (!v) return;
-    const t = v as LeaveType;
-    setLeaveType(t);
-    const b = user.leaveBalances.find((x) => x.leaveType === t);
-    setPerMonth(String(b?.perMonth ?? 1));
-    setAllocated(String(b?.allocated ?? 0));
-  };
-
-  const submit = () => {
-    startTransition(async () => {
-      const res = await setLeaveBalanceAction({
-        userId: user.id,
-        fiscalYear,
-        leaveType,
-        ...(isPaid ? { perMonth: Number(perMonth) } : { allocated: Number(allocated) }),
-      });
-      if (res.error) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success("Leave balance updated");
-      setOpen(false);
-      router.refresh();
-    });
-  };
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (o) {
-          setLeaveType("PAID");
-          const b = user.leaveBalances.find((x) => x.leaveType === "PAID");
-          setPerMonth(String(b?.perMonth ?? 1));
-          setAllocated(String(b?.allocated ?? 0));
-        }
-      }}
-    >
-      <DialogTrigger
-        render={
-          <Button variant="outline" size="sm" aria-label={`Allocate leave for ${user.name}`}>
-            <Wallet />
-            Allocate
-          </Button>
-        }
-      />
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Allocate leave — {user.name}</DialogTitle>
-          <DialogDescription>
-            Set leave entitlement for {fiscalYear}. PAID leave accrues per month; other
-            types use an annual lump. Usage is tracked separately.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          <FieldGroup>
-            <Field>
-              <FieldLabel>Leave type</FieldLabel>
-              <Select value={leaveType} onValueChange={changeType}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {LEAVE_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t.replaceAll("_", " ")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            {isPaid ? (
-              <Field>
-                <FieldLabel htmlFor="al-monthly">Paid days per month</FieldLabel>
-                <Input
-                  id="al-monthly"
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={perMonth}
-                  onChange={(e) => setPerMonth(e.target.value)}
-                  required
-                />
-              </Field>
-            ) : (
-              <Field>
-                <FieldLabel htmlFor="al-allocated">Allocated days (annual)</FieldLabel>
-                <Input
-                  id="al-allocated"
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={allocated}
-                  onChange={(e) => setAllocated(e.target.value)}
-                  required
-                />
-              </Field>
-            )}
-            {balance && (
-              <p className="text-sm text-muted-foreground">
-                Currently{" "}
-                {isPaid
-                  ? `${balance.perMonth}/mo accruing, ${balance.used} used`
-                  : `${balance.allocated} allocated, ${balance.used} used`}
-                .
-              </p>
-            )}
-          </FieldGroup>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending}>
-              {pending && <Loader2 className="size-4 animate-spin" />}
-              Save
-            </Button>
-          </DialogFooter>
-        </form>
       </DialogContent>
     </Dialog>
   );
@@ -480,19 +480,27 @@ export function UsersPanel({
     : roles.filter((r) => r.name !== "Super Admin");
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-end gap-2">
-        <UsersImport roles={assignableRoles} />
-        <CreateUserDialog roles={assignableRoles} />
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          {users.length} account{users.length === 1 ? "" : "s"}
+        </CardTitle>
+        <CardAction>
+          <div className="flex gap-2">
+            <UsersImport roles={assignableRoles} />
+            <CreateUserDialog roles={assignableRoles} />
+          </div>
+        </CardAction>
+      </CardHeader>
+      <CardContent>
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>Designation</TableHead>
+            <TableHead className="hidden md:table-cell">Designation</TableHead>
             <TableHead>Role</TableHead>
-            <TableHead>Leave balance</TableHead>
+            <TableHead className="hidden md:table-cell">Salary</TableHead>
+            <TableHead className="hidden lg:table-cell">Leave balance</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -502,20 +510,34 @@ export function UsersPanel({
               <TableCell className="font-medium">
                 {u.name}
                 {u.id === currentUserId && (
-                  <span className="ml-2 text-xs text-muted-foreground">(you)</span>
+                  <span className="ml-2 font-normal text-muted-foreground">(you)</span>
                 )}
+                <span className="block font-normal text-muted-foreground">{u.email}</span>
               </TableCell>
-              <TableCell>{u.email}</TableCell>
-              <TableCell>{u.designation ?? "-"}</TableCell>
+              <TableCell className="hidden text-muted-foreground md:table-cell">
+                {u.designation ?? "—"}
+              </TableCell>
               <TableCell>
                 <Badge variant={u.isSuperAdmin ? "default" : "secondary"}>
                   {u.role?.name ?? (u.isSuperAdmin ? "Super Admin" : "—")}
                 </Badge>
               </TableCell>
-              <TableCell>
+              <TableCell className="hidden whitespace-nowrap tabular-nums md:table-cell">
+                {u.salary === null ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : (
+                  <>
+                    {money.format(u.salary)}
+                    <span className="text-muted-foreground">
+                      {u.annualSalary ? " /yr" : " /mo"}
+                    </span>
+                  </>
+                )}
+              </TableCell>
+              <TableCell className="hidden lg:table-cell">
                 <div className="flex flex-wrap gap-1.5">
                   {u.leaveBalances.length === 0 && (
-                    <span className="text-sm text-muted-foreground">None</span>
+                    <span className="text-muted-foreground">None</span>
                   )}
                   {u.leaveBalances.map((b) => (
                     <Badge key={b.leaveType} variant="outline">
@@ -535,13 +557,13 @@ export function UsersPanel({
                     canEdit={!u.isSuperAdmin || isSuperAdmin}
                     fiscalYear={fiscalYear}
                   />
-                  {!isLeaveExempt(u) && <AllocateLeaveDialog user={u} fiscalYear={fiscalYear} />}
                 </div>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

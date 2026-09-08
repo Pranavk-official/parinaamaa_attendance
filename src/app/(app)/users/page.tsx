@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
 import { mustUser, requirePermission } from "@/lib/auth-user";
 import { prisma } from "@/lib/prisma";
 import { fiscalYear } from "@/lib/fiscal";
+import { PageHeader } from "@/components/page-header";
 import { UsersPanel } from "@/components/users-panel";
+
+export const metadata: Metadata = { title: "Users" };
 
 export default async function UsersPage() {
   const user = await mustUser();
@@ -22,20 +26,23 @@ export default async function UsersPage() {
     prisma.role.findMany({ orderBy: { name: "asc" } }),
   ]);
 
+  // Prisma Decimal does not cross the server/client boundary, so send a number.
+  const userRows = users.map((u) => ({
+    ...u,
+    salary: u.salary === null ? null : Number(u.salary),
+    annualSalary: u.salaryBasis === "ANNUAL",
+  }));
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage user accounts, roles, and leave allocations for {fy}.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Users"
+        subtitle={`Manage accounts, roles, and leave allocations for ${fy}.`}
+      />
       <UsersPanel
         currentUserId={user.id}
         isSuperAdmin={user.isSuperAdmin}
-        users={users}
+        users={userRows}
         roles={roles}
         fiscalYear={fy}
       />

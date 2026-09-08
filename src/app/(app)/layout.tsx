@@ -13,9 +13,10 @@ export default async function AppLayout({
   return (
     <Nav
       name={user.name}
+      email={user.email}
       canManageUsers={hasPermission(user, "manage:users")}
       canViewReports={hasPermission(user, "view:reports")}
-      canApplyLeave={!isLeaveExempt(user)}
+      isEmployee={!isLeaveExempt(user)}
     >
       {children}
     </Nav>

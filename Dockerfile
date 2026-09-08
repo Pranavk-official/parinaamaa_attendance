@@ -32,4 +32,4 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.ts ./
 EXPOSE 3000
-CMD ["sh", "-c", "bunx prisma migrate deploy && bun prisma/seed.ts && bun run start"]
+CMD ["sh", "-c", "bunx prisma migrate deploy && bun prisma/seed.prod.ts && bun run start"]

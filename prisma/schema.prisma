@@ -15,10 +15,15 @@ enum AttendanceType {
 }
 
 enum LeaveType {
+  // REGULAR is unpaid: uncapped, and deducted from salary.
   REGULAR
   PAID
   COMPENSATORY
-  HALF_DAY
+}
+
+enum SalaryBasis {
+  MONTHLY
+  ANNUAL
 }
 
 enum HalfDaySession {
@@ -47,6 +52,8 @@ model User {
   image         String?
   isSuperAdmin  Boolean        @default(false)
   designation   String?
+  salary        Decimal?       @db.Decimal(12, 2)
+  salaryBasis   SalaryBasis    @default(MONTHLY)
   roleId        String?
   role          Role?          @relation(fields: [roleId], references: [id])
   createdAt     DateTime       @default(now())

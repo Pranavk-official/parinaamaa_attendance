@@ -4,7 +4,23 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma, prismaWithAudit } from "@/lib/prisma";
 import { mustUser, requirePermission } from "@/lib/auth-user";
-import type { LeaveType } from "@/generated/prisma/client";
+import { isLeaveExempt } from "@/lib/leave-policy";
+import { fiscalYear } from "@/lib/fiscal";
+import type { SalaryBasis } from "@/generated/prisma/client";
+
+// REGULAR leave is unpaid and uncapped and half days are uncapped, so PAID and
+// COMPENSATORY are the only balances an admin ever sets.
+export type LeaveAllocation = {
+  paidPerMonth: number;
+  compensatoryAllocated: number;
+};
+
+// Salary is stored as entered; the basis says whether it is a monthly gross or
+// an annual CTC. Payroll derives the monthly figure from the pair.
+export type SalaryInput = {
+  salary: number | null;
+  salaryBasis: SalaryBasis;
+};
 
 export type CreateUserInput = {
   name: string;
@@ -12,7 +28,42 @@ export type CreateUserInput = {
   password: string;
   designation: string;
   roleId: string;
+  leave?: LeaveAllocation;
+  pay?: SalaryInput;
 };
+
+function salaryError(pay: SalaryInput): string | null {
+  if (pay.salary === null) return null;
+  return Number.isFinite(pay.salary) && pay.salary >= 0
+    ? null
+    : "Salary must be a non-negative number";
+}
+
+// Paid leave is allocated in whole days; a half day is drawn from that balance.
+function allocationError(leave: LeaveAllocation): string | null {
+  if (!Number.isInteger(leave.paidPerMonth) || leave.paidPerMonth < 0) {
+    return "Paid days per month must be a whole number of days";
+  }
+  if (!Number.isFinite(leave.compensatoryAllocated) || leave.compensatoryAllocated < 0) {
+    return "Compensatory days must be a non-negative number";
+  }
+  return null;
+}
+
+async function setAllocations(actorId: string, userId: string, leave: LeaveAllocation) {
+  const fy = fiscalYear();
+  const db = prismaWithAudit(actorId);
+  for (const [leaveType, allocated, perMonth] of [
+    ["PAID", 0, leave.paidPerMonth],
+    ["COMPENSATORY", leave.compensatoryAllocated, 0],
+  ] as const) {
+    await db.leaveBalance.upsert({
+      where: { userId_fiscalYear_leaveType: { userId, fiscalYear: fy, leaveType } },
+      create: { userId, fiscalYear: fy, leaveType, allocated, perMonth },
+      update: { allocated, perMonth },
+    });
+  }
+}
 
 function assertAssignableRole(actor: { isSuperAdmin: boolean }, role: { name: string }) {
   if (role.name === "Super Admin" && !actor.isSuperAdmin) {
@@ -31,6 +82,10 @@ export async function createUserAction(input: CreateUserInput) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Invalid email" };
   if (input.password.length < 8) return { error: "Password must be at least 8 characters" };
   if (!input.designation.trim()) return { error: "Designation is required" };
+  const allocationProblem = input.leave && allocationError(input.leave);
+  if (allocationProblem) return { error: allocationProblem };
+  const payProblem = input.pay && salaryError(input.pay);
+  if (payProblem) return { error: payProblem };
 
   const role = await prisma.role.findUnique({ where: { id: input.roleId } });
   if (!role) return { error: "Invalid role" };
@@ -48,8 +103,15 @@ export async function createUserAction(input: CreateUserInput) {
   await prisma.session.deleteMany({ where: { userId: user.id } });
   await prismaWithAudit(actor.id).user.update({
     where: { id: user.id },
-    data: { roleId: role.id, designation: input.designation.trim() },
+    data: {
+      roleId: role.id,
+      designation: input.designation.trim(),
+      ...(input.pay ? { salary: input.pay.salary, salaryBasis: input.pay.salaryBasis } : {}),
+    },
   });
+  if (input.leave && !isLeaveExempt({ isSuperAdmin: false, role })) {
+    await setAllocations(actor.id, user.id, input.leave);
+  }
 
   revalidatePath("/users");
   return { ok: true as const, id: user.id };
@@ -59,6 +121,8 @@ export type UpdateUserInput = {
   name: string;
   designation: string;
   roleId: string;
+  leave?: LeaveAllocation;
+  pay?: SalaryInput;
 };
 
 export async function updateUserAction(id: string, input: UpdateUserInput) {
@@ -67,6 +131,10 @@ export async function updateUserAction(id: string, input: UpdateUserInput) {
 
   const name = input.name.trim();
   if (!name) return { error: "Name is required" };
+  const allocationProblem = input.leave && allocationError(input.leave);
+  if (allocationProblem) return { error: allocationProblem };
+  const payProblem = input.pay && salaryError(input.pay);
+  if (payProblem) return { error: payProblem };
 
   const target = await prisma.user.findUnique({ where: { id } });
   if (!target) return { error: "User not found" };
@@ -81,57 +149,16 @@ export async function updateUserAction(id: string, input: UpdateUserInput) {
 
   await prismaWithAudit(actor.id).user.update({
     where: { id },
-    data: { name, roleId: role.id, designation: input.designation.trim() || null },
+    data: {
+      name,
+      roleId: role.id,
+      designation: input.designation.trim() || null,
+      ...(input.pay ? { salary: input.pay.salary, salaryBasis: input.pay.salaryBasis } : {}),
+    },
   });
-
-  revalidatePath("/users");
-  return { ok: true as const };
-}
-
-export type AllocateLeaveInput = {
-  userId: string;
-  fiscalYear: string;
-  leaveType: LeaveType;
-  // Annual lump for REGULAR/COMPENSATORY/HALF_DAY.
-  allocated?: number;
-  // Monthly accrual (PAID only).
-  perMonth?: number;
-};
-
-export async function setLeaveBalanceAction(input: AllocateLeaveInput) {
-  const actor = await mustUser();
-  requirePermission(actor, "manage:leaves");
-
-  if (input.leaveType === "PAID") {
-    if (!Number.isFinite(input.perMonth) || (input.perMonth ?? -1) < 0) {
-      return { error: "Paid days per month must be a non-negative number" };
-    }
-  } else {
-    if (!Number.isFinite(input.allocated) || (input.allocated ?? -1) < 0) {
-      return { error: "Allocated days must be a non-negative number" };
-    }
+  if (input.leave && !isLeaveExempt({ isSuperAdmin: target.isSuperAdmin, role })) {
+    await setAllocations(actor.id, id, input.leave);
   }
-
-  const perMonth = input.leaveType === "PAID" ? (input.perMonth ?? 0) : 0;
-  const allocated = input.leaveType === "PAID" ? 0 : (input.allocated ?? 0);
-
-  await prismaWithAudit(actor.id).leaveBalance.upsert({
-    where: {
-      userId_fiscalYear_leaveType: {
-        userId: input.userId,
-        fiscalYear: input.fiscalYear,
-        leaveType: input.leaveType,
-      },
-    },
-    create: {
-      userId: input.userId,
-      fiscalYear: input.fiscalYear,
-      leaveType: input.leaveType,
-      allocated,
-      perMonth,
-    },
-    update: { allocated, perMonth },
-  });
 
   revalidatePath("/users");
   return { ok: true as const };

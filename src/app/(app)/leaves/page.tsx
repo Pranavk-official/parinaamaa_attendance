@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { CalendarPlus, Inbox } from "lucide-react";
 import { mustUser, hasPermission } from "@/lib/auth-user";
 import { prisma } from "@/lib/prisma";
 import { countDays } from "@/lib/fiscal";
@@ -12,13 +14,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LeaveActions } from "@/components/leave-actions";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { PageHeader } from "@/components/page-header";
+import { LeaveActions, LeaveDelete } from "@/components/leave-actions";
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
-  PENDING: "secondary",
-  APPROVED: "default",
-  REJECTED: "destructive",
+/** Status carries its own label, so colour here is reinforcement, not the signal. */
+const STATUS_CLASS: Record<string, string> = {
+  PENDING: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  APPROVED: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  REJECTED: "bg-destructive/15 text-destructive",
 };
 
 const SESSION_LABEL: Record<HalfDaySession, string> = {
@@ -35,34 +47,60 @@ type LeaveRow = {
   halfDaySession: HalfDaySession | null;
   status: string;
   reason: string;
+  userId: string;
   user: { name: string; email: string };
 };
 
-function rowFor(l: LeaveRow, canManage: boolean) {
+function iso(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+function rowFor(l: LeaveRow, canManage: boolean, showEmployee: boolean, viewerId: string) {
   const days = countDays(l.startDate, l.endDate, l.isHalfDay);
-  const isHalf = l.isHalfDay || l.type === "HALF_DAY";
   return (
     <TableRow key={l.id}>
-      <TableCell className="whitespace-nowrap">
+      <TableCell className="whitespace-nowrap font-medium">
         {l.type.replaceAll("_", " ")}
-        {isHalf && (
-          <span className="text-muted-foreground">
+        {l.isHalfDay && (
+          <span className="font-normal text-muted-foreground">
             {" "}
             · {l.halfDaySession ? SESSION_LABEL[l.halfDaySession] : "half"}
           </span>
         )}
       </TableCell>
-      <TableCell className="font-medium">{l.user.name}</TableCell>
-      <TableCell>{l.startDate.toISOString().slice(0, 10)}</TableCell>
-      <TableCell>{l.endDate.toISOString().slice(0, 10)}</TableCell>
-      <TableCell>{days}</TableCell>
-      <TableCell className="max-w-[200px] truncate">{l.reason}</TableCell>
-      <TableCell>
-        <Badge variant={STATUS_VARIANT[l.status]}>{l.status}</Badge>
+      {showEmployee && <TableCell>{l.user.name}</TableCell>}
+      <TableCell className="text-muted-foreground">
+        {iso(l.startDate)}
+        <span className="md:hidden"> → {iso(l.endDate)}</span>
+      </TableCell>
+      <TableCell className="hidden text-muted-foreground md:table-cell">
+        {iso(l.endDate)}
+      </TableCell>
+      <TableCell className="text-right tabular-nums">{days}</TableCell>
+      <TableCell className="hidden max-w-[220px] truncate text-muted-foreground lg:table-cell">
+        {l.reason}
       </TableCell>
       <TableCell>
-        {l.status === "PENDING" && canManage && (
-          <LeaveActions id={l.id} name={l.user.name} />
+        <Badge variant="secondary" className={STATUS_CLASS[l.status]}>
+          {l.status}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right">
+        {l.status === "PENDING" && (
+          <div className="flex items-center justify-end gap-2">
+            {canManage && (
+              <LeaveActions
+                id={l.id}
+                name={l.user.name}
+                type={l.type}
+                startDate={iso(l.startDate)}
+                endDate={iso(l.endDate)}
+                days={days}
+              />
+            )}
+            {/* Own request, or a manager tidying the queue. */}
+            {(l.userId === viewerId || canManage) && <LeaveDelete id={l.id} />}
+          </div>
         )}
       </TableCell>
     </TableRow>
@@ -82,43 +120,64 @@ export default async function LeavesPage() {
     take: 30,
   });
 
+  const pending = requests.filter((r) => r.status === "PENDING").length;
+
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {exempt ? "Leave Queue" : "My Leave"}
-      </h1>
+      <PageHeader
+        title={exempt ? "Leave Queue" : "My Leave"}
+        subtitle={
+          exempt
+            ? `${pending} request${pending === 1 ? "" : "s"} awaiting a decision`
+            : "Your last 30 requests and where each one stands."
+        }
+      >
+        {!exempt && (
+          <Button render={<Link href="/leaves/new" />}>
+            <CalendarPlus />
+            Apply leave
+          </Button>
+        )}
+      </PageHeader>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
-            {exempt ? "Requests" : "My Requests"}
-          </CardTitle>
+          <CardTitle>{exempt ? "Requests" : "My requests"}</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Employee</TableHead>
-                <TableHead>Start</TableHead>
-                <TableHead>End</TableHead>
-                <TableHead>Days</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {requests.length === 0 && (
+          {requests.length === 0 ? (
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Inbox />
+                </EmptyMedia>
+                <EmptyTitle>{exempt ? "No requests yet" : "Nothing requested yet"}</EmptyTitle>
+                <EmptyDescription>
+                  {exempt
+                    ? "Leave requests land here as soon as staff submit them."
+                    : "Requests you submit show up here with their status."}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
-                    {exempt ? "No leave requests yet." : "You have no leave requests."}
-                  </TableCell>
+                  <TableHead>Type</TableHead>
+                  {exempt && <TableHead>Employee</TableHead>}
+                  <TableHead>Start</TableHead>
+                  <TableHead className="hidden md:table-cell">End</TableHead>
+                  <TableHead className="text-right">Days</TableHead>
+                  <TableHead className="hidden lg:table-cell">Reason</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
-              )}
-              {requests.map((l) => rowFor(l, canManage))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>{requests.map((l) => rowFor(l, canManage, exempt, user.id))}</TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

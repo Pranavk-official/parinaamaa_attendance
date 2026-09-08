@@ -1,3 +1,4 @@
+import { ScrollText } from "lucide-react";
 import { mustUser, requirePermission } from "@/lib/auth-user";
 import { prisma } from "@/lib/prisma";
 import {
@@ -10,6 +11,14 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { PageHeader } from "@/components/page-header";
 
 function jsonSummary(v: unknown): string {
   if (v == null) return "-";
@@ -27,54 +36,64 @@ export default async function AuditPage() {
   });
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Audit Log</h1>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Audit Log"
+        subtitle="The last 100 attendance and leave-balance changes, newest first."
+      />
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Recent changes</CardTitle>
+          <CardTitle>Recent changes</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>When</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Entity</TableHead>
-                <TableHead>Old</TableHead>
-                <TableHead>New</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {logs.map((l) => (
-                <TableRow key={l.id}>
-                  <TableCell className="whitespace-nowrap text-xs">
-                    {l.createdAt.toLocaleString()}
-                  </TableCell>
-                  <TableCell>{l.actor?.name ?? "system"}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{l.action}</Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {l.entity}:{l.entityId?.slice(0, 8)}
-                  </TableCell>
-                  <TableCell className="max-w-55 truncate text-xs text-muted-foreground">
-                    {l.oldValues ? jsonSummary(l.oldValues) : "-"}
-                  </TableCell>
-                  <TableCell className="max-w-55 truncate text-xs text-muted-foreground">
-                    {l.newValues ? jsonSummary(l.newValues) : "-"}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {logs.length === 0 && (
+          {logs.length === 0 ? (
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <ScrollText />
+                </EmptyMedia>
+                <EmptyTitle>No audit entries yet</EmptyTitle>
+                <EmptyDescription>
+                  Edits to attendance and leave balances are recorded here.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    No audit entries yet.
-                  </TableCell>
+                  <TableHead>When</TableHead>
+                  <TableHead>Actor</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead className="hidden md:table-cell">Entity</TableHead>
+                  <TableHead className="hidden lg:table-cell">Old</TableHead>
+                  <TableHead className="hidden lg:table-cell">New</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {logs.map((l) => (
+                  <TableRow key={l.id}>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {l.createdAt.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="font-medium">{l.actor?.name ?? "system"}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{l.action}</Badge>
+                    </TableCell>
+                    <TableCell className="hidden font-mono text-muted-foreground md:table-cell">
+                      {l.entity}:{l.entityId?.slice(0, 8)}
+                    </TableCell>
+                    <TableCell className="hidden max-w-55 truncate font-mono text-muted-foreground lg:table-cell">
+                      {jsonSummary(l.oldValues)}
+                    </TableCell>
+                    <TableCell className="hidden max-w-55 truncate font-mono text-muted-foreground lg:table-cell">
+                      {jsonSummary(l.newValues)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

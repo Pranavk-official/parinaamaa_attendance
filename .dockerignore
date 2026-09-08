@@ -11,4 +11,3 @@ Dockerfile
 .agents
 .windsurf
 skills-lock.json
-prisma7.config.ts

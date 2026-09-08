@@ -26,3 +26,24 @@ export function countDays(start: Date, end: Date, isHalfDay: boolean): number {
 export function toDateOnly(d: Date): Date {
   return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
 }
+
+// Days still available on a balance. A perMonth balance accrues through the
+// fiscal year; anything else is an annual lump.
+export function remainingDays(
+  b: { allocated: number; perMonth: number; used: number } | null | undefined
+): number {
+  if (!b) return 0;
+  return b.perMonth > 0
+    ? b.perMonth * monthsElapsedInFiscalYear() - b.used
+    : b.allocated - b.used;
+}
+
+// Loss of pay follows the common monthly-gross / days-in-month convention.
+// Change the divisor here if payroll switches to working days.
+export function unpaidDeduction(
+  monthlyGross: number,
+  unpaidDays: number,
+  daysInMonth: number
+): number {
+  return Math.round((monthlyGross / daysInMonth) * unpaidDays * 100) / 100;
+}

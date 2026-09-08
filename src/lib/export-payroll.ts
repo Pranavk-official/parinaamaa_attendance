@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { countDays } from "@/lib/fiscal";
-import type { LeaveType } from "@/generated/prisma/client";
+import { countDays, unpaidDeduction } from "@/lib/fiscal";
+import { isUnpaidLeave } from "@/lib/leave-policy";
 
 export type PayrollRow = {
   name: string;
@@ -10,6 +10,10 @@ export type PayrollRow = {
   totalHours: number;
   offdayWorkDays: number;
   approvedLeaves: number;
+  // REGULAR leave is unpaid, so payroll deducts these days from salary.
+  unpaidLeaveDays: number;
+  monthlyGross: number | null;
+  unpaidDeduction: number | null;
   leaveTypes: string;
 };
 
@@ -21,8 +25,28 @@ const HEADERS = [
   "total_hours",
   "offday_work_days",
   "approved_leaves",
+  "unpaid_leave_days",
+  "monthly_gross",
+  "unpaid_deduction",
   "leave_types",
 ];
+
+// One row order for CSV and XLSX, so a new column can never desync the two.
+function cells(r: PayrollRow) {
+  return [
+    r.name,
+    r.email,
+    r.designation,
+    r.presentDays,
+    r.totalHours,
+    r.offdayWorkDays,
+    r.approvedLeaves,
+    r.unpaidLeaveDays,
+    r.monthlyGross ?? "",
+    r.unpaidDeduction ?? "",
+    r.leaveTypes,
+  ];
+}
 
 function hoursBetween(a: Date, b: Date) {
   return Math.max(0, (b.getTime() - a.getTime()) / (1000 * 60 * 60));
@@ -32,13 +56,6 @@ function csvCell(v: string | number): string {
   const s = String(v);
   return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
-
-const LEAVE_DAYS_TYPE: Record<LeaveType, number> = {
-  REGULAR: 1,
-  PAID: 1,
-  COMPENSATORY: 1,
-  HALF_DAY: 0.5,
-};
 
 // Last complete month by default; accepts "YYYY-MM".
 export function monthRange(monthKey?: string) {
@@ -65,7 +82,14 @@ export async function collectPayrollRows(monthKey?: string) {
 
   const [users, attendances, leaveRequests] = await Promise.all([
     prisma.user.findMany({
-      select: { id: true, name: true, email: true, designation: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        designation: true,
+        salary: true,
+        salaryBasis: true,
+      },
     }),
     prisma.attendance.findMany({
       where: { date: { gte: start, lte: end } },
@@ -89,9 +113,19 @@ export async function collectPayrollRows(monthKey?: string) {
     leavesByUser.set(l.userId, list);
   }
 
+  const daysInMonth = end.getUTCDate();
   const rows: PayrollRow[] = users.map((u) => {
     const att = attendanceByUser.get(u.id) ?? [];
     const leaves = leavesByUser.get(u.id) ?? [];
+    const unpaidLeaveDays = leaves.reduce(
+      (acc, l) =>
+        acc + (isUnpaidLeave(l.type) ? countDays(l.startDate, l.endDate, l.isHalfDay) : 0),
+      0
+    );
+    const monthlyGross =
+      u.salary === null
+        ? null
+        : Number(u.salary) / (u.salaryBasis === "ANNUAL" ? 12 : 1);
     const totalHours = att.reduce(
       (acc, a) => acc + (a.punchOut ? hoursBetween(a.punchIn, a.punchOut) : 0),
       0
@@ -104,10 +138,15 @@ export async function collectPayrollRows(monthKey?: string) {
       totalHours: Math.round(totalHours * 100) / 100,
       offdayWorkDays: att.filter((a) => a.type === "OFFDAY_WORK").length,
       approvedLeaves: leaves.reduce(
-        (acc, l) =>
-          acc + countDays(l.startDate, l.endDate, l.isHalfDay) * LEAVE_DAYS_TYPE[l.type],
+        (acc, l) => acc + countDays(l.startDate, l.endDate, l.isHalfDay),
         0
       ),
+      unpaidLeaveDays,
+      monthlyGross: monthlyGross === null ? null : Math.round(monthlyGross * 100) / 100,
+      unpaidDeduction:
+        monthlyGross === null
+          ? null
+          : unpaidDeduction(monthlyGross, unpaidLeaveDays, daysInMonth),
       leaveTypes: leaves
         .map((l) =>
           l.halfDaySession ? `${l.type} ${l.halfDaySession.toLowerCase()}` : l.type
@@ -121,29 +160,13 @@ export async function collectPayrollRows(monthKey?: string) {
 
 export function payrollToCSV(rows: PayrollRow[]): string {
   const header = HEADERS.join(",");
-  const body = rows.map((r) =>
-    [r.name, r.email, r.designation, r.presentDays, r.totalHours, r.offdayWorkDays, r.approvedLeaves, r.leaveTypes]
-      .map(csvCell)
-      .join(",")
-  );
+  const body = rows.map((r) => cells(r).map(csvCell).join(","));
   return [header, ...body].join("\n");
 }
 
 export async function payrollToXLSX(rows: PayrollRow[]): Promise<ArrayBuffer> {
   const XLSX = await import("xlsx");
-  const ws = XLSX.utils.aoa_to_sheet([
-    HEADERS,
-    ...rows.map((r) => [
-      r.name,
-      r.email,
-      r.designation,
-      r.presentDays,
-      r.totalHours,
-      r.offdayWorkDays,
-      r.approvedLeaves,
-      r.leaveTypes,
-    ]),
-  ]);
+  const ws = XLSX.utils.aoa_to_sheet([HEADERS, ...rows.map(cells)]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Payroll");
   return XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer;

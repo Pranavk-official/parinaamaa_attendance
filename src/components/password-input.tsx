@@ -2,25 +2,29 @@
 
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 
-export function PasswordInput(props: React.ComponentProps<typeof Input>) {
+export function PasswordInput(props: React.ComponentProps<typeof InputGroupInput>) {
   const [visible, setVisible] = useState(false);
   return (
-    <div className="relative">
-      <Input {...props} type={visible ? "text" : "password"} className="pr-10" />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground"
-        aria-label={visible ? "Hide password" : "Show password"}
-        tabIndex={-1}
-        onClick={() => setVisible((v) => !v)}
-      >
-        {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-      </Button>
-    </div>
+    <InputGroup>
+      <InputGroupInput {...props} type={visible ? "text" : "password"} />
+      <InputGroupAddon align="inline-end">
+        <InputGroupButton
+          type="button"
+          size="icon-xs"
+          aria-label={visible ? "Hide password" : "Show password"}
+          tabIndex={-1}
+          onClick={() => setVisible((v) => !v)}
+        >
+          {visible ? <EyeOff /> : <Eye />}
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
   );
 }

@@ -2,9 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma, prismaWithAudit } from "@/lib/prisma";
-import { mustUser, requirePermission } from "@/lib/auth-user";
-import { isLeaveExempt } from "@/lib/leave-policy";
-import { countDays, fiscalYear, monthsElapsedInFiscalYear, toDateOnly } from "@/lib/fiscal";
+import { hasPermission, mustUser, requirePermission } from "@/lib/auth-user";
+import { isLeaveExempt, resolveLeaveType } from "@/lib/leave-policy";
+import {
+  LEAVE_MAIL,
+  gmailComposeUrl,
+  leaveMailBody,
+  leaveMailSubject,
+  rejectMailBody,
+  rejectMailSubject,
+} from "@/lib/leave-mail";
+import { countDays, fiscalYear, remainingDays, toDateOnly } from "@/lib/fiscal";
 import type { HalfDaySession, LeaveType } from "@/generated/prisma/client";
 
 export type LeaveFormInput = {
@@ -14,104 +22,86 @@ export type LeaveFormInput = {
   isHalfDay: boolean;
   halfDaySession: HalfDaySession | null;
   reason: string;
+  // Edited in the form's email accordion; the generated draft is used when absent.
+  mailSubject?: string;
+  mailBody?: string;
 };
 
-function gmailComposeUrl(to: string, cc: string | undefined, subject: string, body: string) {
-  const q = new URLSearchParams({
-    view: "cm",
-    fs: "1",
-    to,
-    ...(cc ? { cc } : {}),
-    su: subject,
-    body,
-  });
-  return `https://mail.google.com/mail/?${q.toString()}`;
-}
+// The To address can still be overridden by MANAGER_EMAIL for a different org.
+const MAIL_TO = process.env.MANAGER_EMAIL || LEAVE_MAIL.to;
 
-const LEAVE_DAYS_TYPE: Record<LeaveType, number> = {
-  REGULAR: 1,
-  PAID: 1,
-  COMPENSATORY: 1,
-  HALF_DAY: 0.5,
-};
+// Long enough for a full letter, short enough to survive as a URL.
+const MAX_MAIL_FIELD = 4000;
 
-const HALF_SESSION_LABEL: Record<HalfDaySession, string> = {
-  MORNING: "morning (9:30 AM - 2:00 PM)",
-  AFTERNOON: "afternoon (2:00 PM - 6:30 PM)",
-};
-
-function daysForRequest(start: Date, end: Date, type: LeaveType, isHalfDay: boolean) {
-  return countDays(start, end, isHalfDay) * LEAVE_DAYS_TYPE[type];
+function trimField(v: string | undefined, fallback: string) {
+  const t = (v ?? "").trim();
+  return t === "" ? fallback : t.slice(0, MAX_MAIL_FIELD);
 }
 
 export async function submitLeaveAction(input: LeaveFormInput) {
   const user = await mustUser();
   if (isLeaveExempt(user)) return { error: "Admins do not apply for leave." };
   const fy = fiscalYear();
+  const isHalf = input.isHalfDay;
   const start = toDateOnly(new Date(`${input.startDate}T00:00:00Z`));
-  const end = toDateOnly(new Date(`${input.endDate}T00:00:00Z`));
+  // A half day covers one date only, so the range collapses onto the start.
+  const end = isHalf ? start : toDateOnly(new Date(`${input.endDate}T00:00:00Z`));
   if (end < start) return { error: "End date before start date" };
+  if (isHalf && start < toDateOnly(new Date())) {
+    return { error: "A half day can only be requested for today or a later date." };
+  }
 
-  const dayMultiplier = LEAVE_DAYS_TYPE[input.type];
-  const requested = countDays(start, end, input.isHalfDay) * dayMultiplier;
+  const requested = countDays(start, end, isHalf);
 
-  const isHalf = input.isHalfDay || input.type === "HALF_DAY";
   if (isHalf && !input.halfDaySession) {
     return { error: "Choose morning or afternoon for a half day." };
   }
 
-  if (
-    (input.type === "PAID" || input.type === "HALF_DAY") &&
-    !isLeaveExempt(user)
-  ) {
-    const balance = await prisma.leaveBalance.findUnique({
-      where: {
-        userId_fiscalYear_leaveType: { userId: user.id, fiscalYear: fy, leaveType: input.type },
-      },
-    });
-    // PAID leave can accrue per month (perMonth) instead of a fixed annual lump.
-    const remaining =
-      (balance?.perMonth ?? 0) > 0
-        ? (balance?.perMonth ?? 0) * monthsElapsedInFiscalYear() - (balance?.used ?? 0)
-        : (balance?.allocated ?? 0) - (balance?.used ?? 0);
-    if (remaining < requested) {
-      return { error: `Insufficient ${input.type} balance. Remaining: ${remaining} day(s).` };
-    }
-  }
+  // The paid balance decides whether this is paid or unpaid, whichever the
+  // employee picked. Half days draw 0.5 from that same balance.
+  const paidBalance =
+    input.type === "COMPENSATORY"
+      ? null
+      : await prisma.leaveBalance.findUnique({
+          where: {
+            userId_fiscalYear_leaveType: { userId: user.id, fiscalYear: fy, leaveType: "PAID" },
+          },
+        });
+  const type = resolveLeaveType(input.type, remainingDays(paidBalance), requested);
 
-  const request = await prisma.leaveRequest.create({
+  await prisma.leaveRequest.create({
     data: {
       userId: user.id,
-      type: input.type,
+      type,
       startDate: start,
       endDate: end,
-      isHalfDay: input.isHalfDay,
+      isHalfDay: isHalf,
       halfDaySession: isHalf ? input.halfDaySession : null,
       reason: input.reason,
     },
   });
 
-  const manager = process.env.MANAGER_EMAIL;
-  if (manager) {
-    const subject = `Leave request ${request.type} (${fy}) - ${user.name}`;
-    const body = [
-      `Name: ${user.name}`,
-      `Designation: ${user.designation ?? "-"}`,
-      `Type: ${request.type}`,
-      ...(isHalf && input.halfDaySession
-        ? [`Session: ${HALF_SESSION_LABEL[input.halfDaySession]}`]
-        : []),
-      `Dates: ${input.startDate} to ${input.endDate}`,
-      `Days: ${requested}`,
-      `Reason: ${input.reason}`,
-      `Approve here: ${process.env.BETTER_AUTH_URL}/leaves`,
-    ].join("\n");
-    return {
-      ok: true as const,
-      composeUrl: gmailComposeUrl(manager, user.email, subject, body),
-    };
-  }
-  return { ok: true as const };
+  const draft = {
+    employeeName: user.name,
+    designation: user.designation,
+    type,
+    startDate: input.startDate,
+    endDate: isHalf ? input.startDate : input.endDate,
+    days: requested,
+    isHalfDay: isHalf,
+    halfDaySession: input.halfDaySession,
+    reason: input.reason,
+  };
+  return {
+    ok: true as const,
+    type,
+    composeUrl: gmailComposeUrl({
+      to: MAIL_TO,
+      cc: LEAVE_MAIL.cc,
+      subject: trimField(input.mailSubject, leaveMailSubject(draft)),
+      body: `${trimField(input.mailBody, leaveMailBody(draft))}\n\nApprove here: ${process.env.BETTER_AUTH_URL}/leaves`,
+    }),
+  };
 }
 
 export async function approveLeaveAction(id: string) {
@@ -132,26 +122,33 @@ export async function approveLeaveAction(id: string) {
       return { ok: true as const, already: false as const, composeUrl: null as string | null };
     }
 
-    const requested = daysForRequest(
-      request.startDate,
-      request.endDate,
-      request.type,
-      request.isHalfDay
-    );
+    const requested = countDays(request.startDate, request.endDate, request.isHalfDay);
 
     const fy = fiscalYear(request.startDate);
+    // The balance is spent here, so re-decide against it: the paid days left at
+    // approval time are the ones that matter, not the ones left at submission.
+    const paidBalance =
+      request.type === "COMPENSATORY"
+        ? null
+        : await tx.leaveBalance.findUnique({
+            where: {
+              userId_fiscalYear_leaveType: {
+                userId: request.userId,
+                fiscalYear: fy,
+                leaveType: "PAID",
+              },
+            },
+          });
+    const type = resolveLeaveType(request.type, remainingDays(paidBalance), requested);
+
     await tx.leaveBalance.upsert({
       where: {
-        userId_fiscalYear_leaveType: {
-          userId: request.userId,
-          fiscalYear: fy,
-          leaveType: request.type,
-        },
+        userId_fiscalYear_leaveType: { userId: request.userId, fiscalYear: fy, leaveType: type },
       },
       create: {
         userId: request.userId,
         fiscalYear: fy,
-        leaveType: request.type,
+        leaveType: type,
         allocated: 0,
         used: requested,
       },
@@ -159,17 +156,27 @@ export async function approveLeaveAction(id: string) {
     });
     await tx.leaveRequest.update({
       where: { id },
-      data: { status: "APPROVED" },
+      data: { status: "APPROVED", type },
     });
-    const composeUrl = gmailComposeUrl(
-      request.user.email,
-      process.env.MANAGER_EMAIL,
-      `Leave approved (${fy})`,
-      [
-        `Your ${request.type} leave request for ${request.startDate.toISOString().slice(0, 10)} to ${request.endDate.toISOString().slice(0, 10)} has been approved.`,
+    const composeUrl = gmailComposeUrl({
+      to: request.user.email,
+      cc: LEAVE_MAIL.cc,
+      subject: `Leave approved (${fy})`,
+      body: [
+        `Dear ${request.user.name},`,
+        "",
+        `Your ${type} leave request for ${request.startDate.toISOString().slice(0, 10)} to ${request.endDate.toISOString().slice(0, 10)} has been approved.`,
         `Days: ${requested}`,
-      ].join("\n")
-    );
+        ...(type === request.type
+          ? []
+          : type === "REGULAR"
+            ? ["Note: your paid balance was exhausted, so this is unpaid regular leave."]
+            : ["Note: you had paid days left, so this was taken as paid leave."]),
+        "",
+        "Kind regards,",
+        LEAVE_MAIL.managerName,
+      ].join("\n"),
+    });
     return { ok: true as const, already: false as const, composeUrl };
   }).then((result) => {
     revalidatePath("/leaves");
@@ -178,24 +185,32 @@ export async function approveLeaveAction(id: string) {
   });
 }
 
-export async function rejectLeaveAction(id: string) {
+export async function rejectLeaveAction(
+  id: string,
+  // Edited in the reject dialog; the generated draft is used when absent.
+  mail?: { subject?: string; body?: string }
+) {
   const actor = await mustUser();
   requirePermission(actor, "manage:leaves");
 
   const request = await prismaWithAudit(actor.id).leaveRequest.update({
     where: { id },
     data: { status: "REJECTED" },
-    include: { user: { select: { email: true } } },
+    include: { user: { select: { name: true, email: true } } },
   });
-  const composeUrl = gmailComposeUrl(
-    request.user.email,
-    process.env.MANAGER_EMAIL,
-    "Leave request rejected",
-    [
-      `Your ${request.type} leave request for ${request.startDate.toISOString().slice(0, 10)} to ${request.endDate.toISOString().slice(0, 10)} was rejected.`,
-      "Contact your manager for details.",
-    ].join("\n")
-  );
+  const draft = {
+    employeeName: request.user.name,
+    type: request.type,
+    startDate: request.startDate.toISOString().slice(0, 10),
+    endDate: request.endDate.toISOString().slice(0, 10),
+    days: countDays(request.startDate, request.endDate, request.isHalfDay),
+  };
+  const composeUrl = gmailComposeUrl({
+    to: request.user.email,
+    cc: LEAVE_MAIL.cc,
+    subject: trimField(mail?.subject, rejectMailSubject(draft)),
+    body: trimField(mail?.body, rejectMailBody(draft)),
+  });
   revalidatePath("/leaves");
   return { ok: true as const, composeUrl };
 }
@@ -204,4 +219,23 @@ export async function getLeaveBalances(userId: string) {
   return prisma.leaveBalance.findMany({
     where: { userId, fiscalYear: fiscalYear() },
   });
+}
+
+export async function deleteLeaveAction(id: string) {
+  const actor = await mustUser();
+  const request = await prisma.leaveRequest.findUnique({ where: { id } });
+  if (!request) return { error: "Request not found" };
+  if (request.userId !== actor.id && !hasPermission(actor, "manage:leaves")) {
+    return { error: "You can only delete your own requests" };
+  }
+  // ponytail: pending only. Deleting an approved request would also have to
+  // give back the balance day it already spent; add that when someone asks.
+  if (request.status !== "PENDING") {
+    return { error: "Only a pending request can be deleted" };
+  }
+
+  await prismaWithAudit(actor.id).leaveRequest.delete({ where: { id } });
+  revalidatePath("/leaves");
+  revalidatePath("/");
+  return { ok: true as const };
 }

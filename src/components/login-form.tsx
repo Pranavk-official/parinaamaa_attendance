@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+
 import { cn } from "cn";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { PasswordInput } from "@/components/password-input";
@@ -77,7 +78,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               </Field>
               <Field>
                 <Button className="w-full" type="submit" disabled={pending}>
-                  {pending && <Loader2 className="size-4 animate-spin" />}
+                  {pending && <Spinner />}
                   Sign in
                 </Button>
               </Field>

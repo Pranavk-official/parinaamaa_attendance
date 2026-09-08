@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Loader2, ShieldX } from "lucide-react";
+import { ShieldX } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -14,14 +15,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Session = Awaited<ReturnType<typeof authClient.listSessions>>["data"][number];
 
@@ -62,7 +66,7 @@ function SessionRow({
             disabled={pending}
             onClick={() => onRevoke(session)}
           >
-            {pending && <Loader2 className="size-4 animate-spin" />}
+            {pending && <Spinner />}
             Revoke
           </Button>
         )}
@@ -124,33 +128,36 @@ export function SessionsPanel() {
               pending={pending}
             />
           ))}
-          {sessions.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground">
-                Loading sessions...
-              </TableCell>
-            </TableRow>
-          )}
+          {sessions.length === 0 &&
+            Array.from({ length: 3 }, (_, i) => (
+              <TableRow key={i}>
+                {Array.from({ length: 4 }, (_, c) => (
+                  <TableCell key={c}>
+                    <Skeleton className="h-4 w-full" />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
         </TableBody>
       </Table>
 
-      <Dialog open={!!confirmTarget || revokeAll} onOpenChange={() => { setTarget(null); setRevokeAll(false); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
+      <AlertDialog open={!!confirmTarget || revokeAll} onOpenChange={() => { setTarget(null); setRevokeAll(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
               {revokeAll ? "Revoke all other sessions?" : "Revoke this session?"}
-            </DialogTitle>
-            <DialogDescription>
+            </AlertDialogTitle>
+            <AlertDialogDescription>
               {revokeAll
                 ? "Every device except this one will be signed out immediately."
                 : "This device will be signed out immediately. It can sign back in with its password."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setTarget(null); setRevokeAll(false); }}>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setTarget(null); setRevokeAll(false); }}>
               Cancel
-            </Button>
-            <Button
+            </AlertDialogCancel>
+            <AlertDialogAction
               variant="destructive"
               disabled={pending}
               onClick={() => {
@@ -170,12 +177,12 @@ export function SessionsPanel() {
                 });
               }}
             >
-              {pending && <Loader2 className="size-4 animate-spin" />}
+              {pending && <Spinner />}
               Revoke
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1,48 +1,36 @@
 "use client";
 
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
+import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-const THEMES = [
-  { value: "system", icon: Monitor, label: "System" },
-  { value: "light", icon: Sun, label: "Light" },
-  { value: "dark", icon: Moon, label: "Dark" },
-] as const;
+const THEMES = ["light", "dark", "system"] as const;
 
 export function ThemeSwitcher() {
-  const { theme, setTheme } = useTheme();
-  const current = THEMES.find((t) => t.value === theme) ?? THEMES[0];
-  const Icon = current.icon;
+  const { setTheme } = useTheme();
 
   return (
-    <Select
-      value={theme ?? "system"}
-      onValueChange={(v) => {
-        if (v) setTheme(v);
-      }}
-    >
-      <SelectTrigger aria-label="Theme" className="w-10 px-0 justify-center">
-        <Icon className="size-4" />
-      </SelectTrigger>
-      <SelectContent>
-        {THEMES.map((t) => {
-          const ItemIcon = t.icon;
-          return (
-            <SelectItem key={t.value} value={t.value}>
-              <span className="flex items-center gap-2">
-                <ItemIcon className="size-4" />
-                {t.label}
-              </span>
-            </SelectItem>
-          );
-        })}
-      </SelectContent>
-    </Select>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="ghost" size="icon" className="relative" />}
+      >
+        <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+        <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+        <span className="sr-only">Toggle theme</span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {THEMES.map((t) => (
+          <DropdownMenuItem key={t} onClick={() => setTheme(t)} className="capitalize">
+            {t}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
