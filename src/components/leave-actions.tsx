@@ -15,16 +15,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { LEAVE_MAIL, rejectMailBody, rejectMailSubject } from "@/lib/leave-mail";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ResponsiveConfirm } from "@/components/responsive-confirm";
 import { useRouter } from "next/navigation";
 import {
   approveLeaveAction,
@@ -62,22 +53,19 @@ export function LeaveDelete({ id }: { id: string }) {
       >
         {pending ? <Spinner /> : <Trash2 />}
       </Button>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this leave request?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The request is removed for good. Submit a new one if you change your mind.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Keep it</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" disabled={pending} onClick={remove}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ResponsiveConfirm
+        open={open}
+        onOpenChange={setOpen}
+        title="Delete this leave request?"
+        description="The request is removed for good. Submit a new one if you change your mind."
+        cancelLabel="Keep it"
+        cancelDisabled={pending}
+        actions={
+          <Button variant="destructive" disabled={pending} onClick={remove}>
+            Delete
+          </Button>
+        }
+      />
     </>
   );
 }
@@ -103,18 +91,20 @@ export function LeaveActions({
   // null means "still following the generated draft".
   const [mailSubject, setMailSubject] = useState<string | null>(null);
   const [mailBody, setMailBody] = useState<string | null>(null);
+  const [mailCc, setMailCc] = useState<string | null>(null);
 
   // Only rejection is edited here; an approval mail reports the outcome the
   // server works out (paid, or downgraded to unpaid), so it is written there.
   const draft = { employeeName: name, type, startDate, endDate, days };
   const subject = mailSubject ?? rejectMailSubject(draft);
   const body = mailBody ?? rejectMailBody(draft);
-  const edited = mailSubject !== null || mailBody !== null;
+  const edited = mailSubject !== null || mailBody !== null || mailCc !== null;
 
   const openFor = (next: "approve" | "reject") => {
     setAction(next);
     setMailSubject(null);
     setMailBody(null);
+    setMailCc(null);
     setOpen(true);
   };
 
@@ -124,7 +114,7 @@ export function LeaveActions({
       const res =
         action === "approve"
           ? await approveLeaveAction(id)
-          : await rejectLeaveAction(id, { subject, body });
+          : await rejectLeaveAction(id, { subject, body, cc: mailCc ?? "" });
       if (action === "approve" && !res.ok) {
         toast.error("Approval failed");
         return;
@@ -155,18 +145,30 @@ export function LeaveActions({
           Reject
         </Button>
       </div>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {verb} leave for {name}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              The request is {action === "reject" ? "rejected" : "approved"} either way.
-              Choose whether {name} also gets an email about it.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {action === "reject" && (
+      <ResponsiveConfirm
+        open={open}
+        onOpenChange={setOpen}
+        title={`${verb} leave for ${name}?`}
+        description={`The request is ${action === "reject" ? "rejected" : "approved"} either way. Choose whether ${name} also gets an email about it.`}
+        cancelDisabled={pending}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant={action === "reject" ? "destructive" : "outline"}
+              disabled={pending}
+              onClick={() => run(false)}
+            >
+              {verb}
+            </Button>
+            <Button type="button" disabled={pending} onClick={() => run(true)}>
+              {pending ? <Spinner /> : <Mail />}
+              {verb} and send mail
+            </Button>
+          </>
+        }
+      >
+        {action === "reject" && (
             <Accordion>
               <AccordionItem value="mail">
                 <AccordionTrigger>Email to {name} (optional — edit before sending)</AccordionTrigger>
@@ -181,6 +183,15 @@ export function LeaveActions({
                         id="reject-subject"
                         value={subject}
                         onChange={(e) => setMailSubject(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="reject-cc">Cc</FieldLabel>
+                      <Input
+                        id="reject-cc"
+                        placeholder="Comma-separated extra recipients — leave blank for none"
+                        value={mailCc ?? ""}
+                        onChange={(e) => setMailCc(e.target.value)}
                       />
                     </Field>
                     <Field>
@@ -201,6 +212,7 @@ export function LeaveActions({
                         onClick={() => {
                           setMailSubject(null);
                           setMailBody(null);
+                          setMailCc(null);
                         }}
                       >
                         <RotateCcw />
@@ -212,22 +224,7 @@ export function LeaveActions({
               </AccordionItem>
             </Accordion>
           )}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant={action === "reject" ? "destructive" : "outline"}
-              disabled={pending}
-              onClick={() => run(false)}
-            >
-              {verb}
-            </AlertDialogAction>
-            <AlertDialogAction disabled={pending} onClick={() => run(true)}>
-              {pending ? <Spinner /> : <Mail />}
-              {verb} and send mail
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </ResponsiveConfirm>
     </>
   );
 }

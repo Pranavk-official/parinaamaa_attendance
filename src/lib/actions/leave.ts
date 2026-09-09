@@ -13,6 +13,7 @@ import {
   rejectMailSubject,
 } from "@/lib/leave-mail";
 import { countDays, fiscalYear, remainingDays, toDateOnly } from "@/lib/fiscal";
+import { getFiscalStart } from "@/lib/settings";
 import type { HalfDaySession, LeaveType } from "@/generated/prisma/client";
 
 export type LeaveFormInput = {
@@ -25,6 +26,7 @@ export type LeaveFormInput = {
   // Edited in the form's email accordion; the generated draft is used when absent.
   mailSubject?: string;
   mailBody?: string;
+  mailCc?: string;
 };
 
 // The To address can still be overridden by MANAGER_EMAIL for a different org.
@@ -38,10 +40,16 @@ function trimField(v: string | undefined, fallback: string) {
   return t === "" ? fallback : t.slice(0, MAX_MAIL_FIELD);
 }
 
+/** Default accounts copy plus any extra recipients from the form, comma-joined. */
+function ccField(extra: string | undefined) {
+  return [LEAVE_MAIL.cc, trimField(extra, "")].filter(Boolean).join(", ");
+}
+
 export async function submitLeaveAction(input: LeaveFormInput) {
   const user = await mustUser();
   if (isLeaveExempt(user)) return { error: "Admins do not apply for leave." };
-  const fy = fiscalYear();
+  const fyStart = await getFiscalStart();
+  const fy = fiscalYear(new Date(), fyStart);
   const isHalf = input.isHalfDay;
   const start = toDateOnly(new Date(`${input.startDate}T00:00:00Z`));
   // A half day covers one date only, so the range collapses onto the start.
@@ -67,7 +75,7 @@ export async function submitLeaveAction(input: LeaveFormInput) {
             userId_fiscalYear_leaveType: { userId: user.id, fiscalYear: fy, leaveType: "PAID" },
           },
         });
-  const type = resolveLeaveType(input.type, remainingDays(paidBalance), requested);
+  const type = resolveLeaveType(input.type, remainingDays(paidBalance, fyStart), requested);
 
   await prisma.leaveRequest.create({
     data: {
@@ -97,7 +105,7 @@ export async function submitLeaveAction(input: LeaveFormInput) {
     type,
     composeUrl: gmailComposeUrl({
       to: MAIL_TO,
-      cc: LEAVE_MAIL.cc,
+      cc: ccField(input.mailCc),
       subject: trimField(input.mailSubject, leaveMailSubject(draft)),
       body: `${trimField(input.mailBody, leaveMailBody(draft))}\n\nApprove here: ${process.env.BETTER_AUTH_URL}/leaves`,
     }),
@@ -124,7 +132,8 @@ export async function approveLeaveAction(id: string) {
 
     const requested = countDays(request.startDate, request.endDate, request.isHalfDay);
 
-    const fy = fiscalYear(request.startDate);
+    const start = await getFiscalStart();
+    const fy = fiscalYear(request.startDate, start);
     // The balance is spent here, so re-decide against it: the paid days left at
     // approval time are the ones that matter, not the ones left at submission.
     const paidBalance =
@@ -139,7 +148,7 @@ export async function approveLeaveAction(id: string) {
               },
             },
           });
-    const type = resolveLeaveType(request.type, remainingDays(paidBalance), requested);
+    const type = resolveLeaveType(request.type, remainingDays(paidBalance, start), requested);
 
     await tx.leaveBalance.upsert({
       where: {
@@ -188,7 +197,7 @@ export async function approveLeaveAction(id: string) {
 export async function rejectLeaveAction(
   id: string,
   // Edited in the reject dialog; the generated draft is used when absent.
-  mail?: { subject?: string; body?: string }
+  mail?: { subject?: string; body?: string; cc?: string }
 ) {
   const actor = await mustUser();
   requirePermission(actor, "manage:leaves");
@@ -207,7 +216,7 @@ export async function rejectLeaveAction(
   };
   const composeUrl = gmailComposeUrl({
     to: request.user.email,
-    cc: LEAVE_MAIL.cc,
+    cc: ccField(mail?.cc),
     subject: trimField(mail?.subject, rejectMailSubject(draft)),
     body: trimField(mail?.body, rejectMailBody(draft)),
   });
@@ -217,7 +226,7 @@ export async function rejectLeaveAction(
 
 export async function getLeaveBalances(userId: string) {
   return prisma.leaveBalance.findMany({
-    where: { userId, fiscalYear: fiscalYear() },
+    where: { userId, fiscalYear: fiscalYear(new Date(), await getFiscalStart()) },
   });
 }
 

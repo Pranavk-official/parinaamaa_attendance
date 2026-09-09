@@ -1,6 +1,11 @@
+// Pure date-range math lives in fiscal.ts so scripts/check.ts can assert it
+// without pulling in the Prisma client; re-exported here for the app.
+export { monthRange, periodRange } from "@/lib/fiscal";
+import { periodRange, type PayrollPeriod } from "@/lib/fiscal";
 import { prisma } from "@/lib/prisma";
 import { countDays, unpaidDeduction } from "@/lib/fiscal";
 import { EMPLOYEE_WHERE, isUnpaidLeave } from "@/lib/leave-policy";
+import { getPayrollDay } from "@/lib/settings";
 
 export type PayrollRow = {
   name: string;
@@ -60,28 +65,8 @@ function csvCell(v: string | number): string {
   return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 
-// Last complete month by default; accepts "YYYY-MM".
-export function monthRange(monthKey?: string) {
-  const m = /^(\d{4})-(\d{2})$/.exec(monthKey ?? "");
-  if (m) {
-    const y = Number(m[1]);
-    const month = Number(m[2]);
-    if (month >= 1 && month <= 12) {
-      return {
-        start: new Date(Date.UTC(y, month - 1, 1)),
-        end: new Date(Date.UTC(y, month, 0, 23, 59, 59)),
-        label: monthKey!,
-      };
-    }
-  }
-  const now = new Date();
-  const start = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 1, 1));
-  const end = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 0, 23, 59, 59));
-  return { start, end, label: start.toISOString().slice(0, 7) };
-}
-
-export async function collectPayrollRows(monthKey?: string) {
-  const { start, end, label } = monthRange(monthKey);
+export async function collectPayrollRows(period?: PayrollPeriod) {
+  const { start, endExclusive, label } = periodRange(await getPayrollDay(), period);
 
   const [users, attendances, leaveRequests] = await Promise.all([
     prisma.user.findMany({
@@ -99,11 +84,11 @@ export async function collectPayrollRows(monthKey?: string) {
       },
     }),
     prisma.attendance.findMany({
-      where: { date: { gte: start, lte: end } },
+      where: { date: { gte: start, lt: endExclusive } },
       orderBy: [{ date: "asc" }],
     }),
     prisma.leaveRequest.findMany({
-      where: { status: "APPROVED", startDate: { lte: end }, endDate: { gte: start } },
+      where: { status: "APPROVED", startDate: { lt: endExclusive }, endDate: { gte: start } },
     }),
   ]);
 
@@ -120,7 +105,8 @@ export async function collectPayrollRows(monthKey?: string) {
     leavesByUser.set(l.userId, list);
   }
 
-  const daysInMonth = end.getUTCDate();
+  // Whole period length in days, half-open: [start, endExclusive).
+  const daysInMonth = Math.round((endExclusive.getTime() - start.getTime()) / 86_400_000);
   const rows: PayrollRow[] = users.map((u) => {
     const att = attendanceByUser.get(u.id) ?? [];
     const leaves = leavesByUser.get(u.id) ?? [];

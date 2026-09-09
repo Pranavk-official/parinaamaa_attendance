@@ -11,7 +11,9 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const format = url.searchParams.get("format");
   const month = url.searchParams.get("month") ?? undefined;
-  const { label, rows } = await collectPayrollRows(month);
+  const from = url.searchParams.get("from") ?? undefined;
+  const to = url.searchParams.get("to") ?? undefined;
+  const { label, rows } = await collectPayrollRows({ month, from, to });
 
   if (format === "xlsx") {
     const buffer = await payrollToXLSX(rows);

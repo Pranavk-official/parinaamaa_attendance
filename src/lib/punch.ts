@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { countDays, fiscalYear, remainingDays, toDateOnly } from "@/lib/fiscal";
+import { getFiscalStart } from "@/lib/settings";
+import { countDays, fiscalYear, remainingDays, toDateOnly, type FiscalStart } from "@/lib/fiscal";
 import {
   compensatoryEarned,
   isLeaveExempt,
@@ -50,7 +51,8 @@ export async function punchOut(userId: string) {
   // Exempt staff carry no balances, so neither rule below applies to them.
   if (!user || isLeaveExempt(user)) return { attendance, compensatoryEarned: 0 };
 
-  const fy = fiscalYear(date);
+  const start = await getFiscalStart();
+  const fy = fiscalYear(date, start);
   const offday = attendance.type === "OFFDAY_WORK";
 
   const earned = offday
@@ -72,12 +74,12 @@ export async function punchOut(userId: string) {
   // the other half becomes a leave request for a manager to action.
   const halfDay =
     !offday && attendance.punchOut !== null && leftEarly(attendance.punchOut);
-  if (halfDay) await markEarlyLeave(userId, date, fy);
+  if (halfDay) await markEarlyLeave(userId, date, fy, start);
 
   return { attendance, compensatoryEarned: earned, halfDay };
 }
 
-async function markEarlyLeave(userId: string, date: Date, fy: string) {
+async function markEarlyLeave(userId: string, date: Date, fy: string, start: FiscalStart) {
   // One punch-out per day already, but a hand-filed request for the same date
   // should not be doubled up either.
   const existing = await prisma.leaveRequest.findFirst({
@@ -93,7 +95,7 @@ async function markEarlyLeave(userId: string, date: Date, fy: string) {
   await prisma.leaveRequest.create({
     data: {
       userId,
-      type: resolveLeaveType("PAID", remainingDays(balance), requested),
+      type: resolveLeaveType("PAID", remainingDays(balance, start), requested),
       startDate: date,
       endDate: date,
       isHalfDay: true,

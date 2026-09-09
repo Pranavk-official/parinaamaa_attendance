@@ -36,6 +36,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { ResponsiveConfirm } from "@/components/responsive-confirm";
 import { LEAVE_MAIL, leaveMailBody, leaveMailSubject } from "@/lib/leave-mail";
 import { submitLeaveAction } from "@/lib/actions/leave";
 import type { HalfDaySession, LeaveType } from "@/generated/prisma/client";
@@ -78,6 +79,7 @@ export function LeaveForm({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const {
     register,
     handleSubmit,
@@ -92,6 +94,7 @@ export function LeaveForm({
   const [range, setRange] = useState<{ from?: Date; to?: Date }>({});
   const [mailSubject, setMailSubject] = useState<string | null>(null);
   const [mailBody, setMailBody] = useState<string | null>(null);
+  const [mailCc, setMailCc] = useState<string | null>(null);
   // Half days cannot be backdated, so the picker stops before today.
   const [today] = useState(() => startOfDay(new Date()));
 
@@ -99,7 +102,12 @@ export function LeaveForm({
   const submitWith = (sendMail: boolean) =>
     handleSubmit((values) => {
       startTransition(async () => {
-        const res = await submitLeaveAction({ ...values, mailSubject: subject, mailBody: body });
+        const res = await submitLeaveAction({
+          ...values,
+          mailSubject: subject,
+          mailBody: body,
+          mailCc: mailCc ?? "",
+        });
         if (res.error) {
           toast.error(res.error);
           return;
@@ -164,7 +172,7 @@ export function LeaveForm({
   const body = mailBody ?? leaveMailBody(draft);
 
   return (
-    <Card className="max-w-2xl">
+    <Card className="max-w-4xl">
       <CardHeader>
         <CardTitle>Apply for leave</CardTitle>
         <CardDescription>
@@ -178,7 +186,7 @@ export function LeaveForm({
             e.preventDefault();
             submitWith(false);
           }}
-          className="flex flex-col gap-5"
+          className="grid grid-cols-1 gap-5 md:grid-cols-2 md:items-start"
         >
           <FieldGroup>
             <Field>
@@ -314,7 +322,61 @@ export function LeaveForm({
             </Field>
           </FieldGroup>
 
-          <Accordion>
+          {/* Mobile: collapsed accordion. Desktop: always visible second column. */}
+          <div className="hidden md:block">
+            <p className="mb-3 text-xs font-medium text-muted-foreground">
+              Email to {LEAVE_MAIL.managerName} — optional, edit before sending
+            </p>
+            <FieldGroup>
+              <FieldDescription>
+                To {LEAVE_MAIL.to}, cc {LEAVE_MAIL.cc}. Square brackets mark anything
+                the form has not filled in yet.
+              </FieldDescription>
+              <Field>
+                <FieldLabel htmlFor="mail-subject">Subject</FieldLabel>
+                <Input
+                  id="mail-subject"
+                  value={subject}
+                  onChange={(e) => setMailSubject(e.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="mail-cc">Cc</FieldLabel>
+                <Input
+                  id="mail-cc"
+                  placeholder="Comma-separated extra recipients — leave blank for none"
+                  value={mailCc ?? ""}
+                  onChange={(e) => setMailCc(e.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="mail-body">Message</FieldLabel>
+                <Textarea
+                  id="mail-body"
+                  rows={12}
+                  value={body}
+                  onChange={(e) => setMailBody(e.target.value)}
+                />
+              </Field>
+              {(mailSubject !== null || mailBody !== null || mailCc !== null) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="self-start"
+                  onClick={() => {
+                    setMailSubject(null);
+                    setMailBody(null);
+                    setMailCc(null);
+                  }}
+                >
+                  <RotateCcw />
+                  Reset to the suggested wording
+                </Button>
+              )}
+            </FieldGroup>
+          </div>
+          <Accordion className="md:hidden">
             <AccordionItem value="email">
               <AccordionTrigger>
                 Email to {LEAVE_MAIL.managerName} (optional — edit before sending)
@@ -326,23 +388,32 @@ export function LeaveForm({
                     the form has not filled in yet.
                   </FieldDescription>
                   <Field>
-                    <FieldLabel htmlFor="mail-subject">Subject</FieldLabel>
+                    <FieldLabel htmlFor="mail-subject-mobile">Subject</FieldLabel>
                     <Input
-                      id="mail-subject"
+                      id="mail-subject-mobile"
                       value={subject}
                       onChange={(e) => setMailSubject(e.target.value)}
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="mail-body">Message</FieldLabel>
+                    <FieldLabel htmlFor="mail-cc-mobile">Cc</FieldLabel>
+                    <Input
+                      id="mail-cc-mobile"
+                      placeholder="Comma-separated extra recipients — leave blank for none"
+                      value={mailCc ?? ""}
+                      onChange={(e) => setMailCc(e.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="mail-body-mobile">Message</FieldLabel>
                     <Textarea
-                      id="mail-body"
+                      id="mail-body-mobile"
                       rows={12}
                       value={body}
                       onChange={(e) => setMailBody(e.target.value)}
                     />
                   </Field>
-                  {(mailSubject !== null || mailBody !== null) && (
+                  {(mailSubject !== null || mailBody !== null || mailCc !== null) && (
                     <Button
                       type="button"
                       variant="outline"
@@ -351,6 +422,7 @@ export function LeaveForm({
                       onClick={() => {
                         setMailSubject(null);
                         setMailBody(null);
+                        setMailCc(null);
                       }}
                     >
                       <RotateCcw />
@@ -362,7 +434,7 @@ export function LeaveForm({
             </AccordionItem>
           </Accordion>
 
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 sm:flex-row md:col-span-2">
             <Button
               type="button"
               size="lg"
@@ -376,11 +448,31 @@ export function LeaveForm({
               type="button"
               size="lg"
               disabled={pending}
-              onClick={() => submitWith(true)}
+              onClick={() => setConfirmOpen(true)}
             >
               {pending ? <Spinner /> : <Mail />}
               Submit and send mail
             </Button>
+            <ResponsiveConfirm
+              open={confirmOpen}
+              onOpenChange={setConfirmOpen}
+              title="Send leave request?"
+              description={`This submits your leave request and opens your email client to send a notification to ${LEAVE_MAIL.managerName}.`}
+              actions={
+                <Button
+                  type="button"
+                  size="lg"
+                  disabled={pending}
+                  onClick={() => {
+                    setConfirmOpen(false);
+                    submitWith(true);
+                  }}
+                >
+                  {pending ? <Spinner /> : <Mail />}
+                  Confirm and send
+                </Button>
+              }
+            />
           </div>
         </form>
       </CardContent>

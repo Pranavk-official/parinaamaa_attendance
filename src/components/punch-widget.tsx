@@ -6,16 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ResponsiveConfirm } from "@/components/responsive-confirm";
 import { QrScanner } from "@/components/qr-scanner";
 import { wfhPunchInAction, punchOutAction } from "@/lib/actions/attendance";
 import type { AttendanceType } from "@/generated/prisma/client";
@@ -55,26 +46,25 @@ function PunchButton({
         {pending && <Spinner />}
         {label}
       </Button>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{title}</AlertDialogTitle>
-            <AlertDialogDescription>{description}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={pending}
-              onClick={() => {
-                setOpen(false);
-                run();
-              }}
-            >
-              {label}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ResponsiveConfirm
+        open={open}
+        onOpenChange={setOpen}
+        title={title}
+        description={description}
+        cancelDisabled={pending}
+        actions={
+          <Button
+            disabled={pending}
+            onClick={() => {
+              setOpen(false);
+              run();
+            }}
+          >
+            {pending && <Spinner />}
+            {label}
+          </Button>
+        }
+      />
     </>
   );
 }

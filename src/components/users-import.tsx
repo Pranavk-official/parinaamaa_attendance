@@ -18,6 +18,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { createUserAction } from "@/lib/actions/users";
 
 type RoleRow = { id: string; name: string };
@@ -70,6 +80,7 @@ function num(v: unknown, fallback: number): number | null {
 export function UsersImport({ roles }: { roles: RoleRow[] }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [rows, setRows] = useState<ParsedRow[] | null>(null);
@@ -167,35 +178,39 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
     });
   };
 
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (!o) {
-          setRows(null);
-          setErrors([]);
-        }
-      }}
-    >
-      <DialogTrigger
-        render={
-          <Button variant="outline">
-            <FileUp />
-            Import users
-          </Button>
-        }
-      />
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Import users</DialogTitle>
-          <DialogDescription>
-            Upload a .csv or .xlsx file. Columns: name, email, password, designation,
-            role (defaults to Employee), salary, salaryBasis (annual or monthly,
-            defaults to monthly), paidPerMonth (defaults to 1), compensatory (defaults
-            to 0). Regular leave is unpaid and uncapped, so it is never allocated.
-          </DialogDescription>
-        </DialogHeader>
+  const onOpenChange = (o: boolean) => {
+    setOpen(o);
+    if (!o) {
+      setRows(null);
+      setErrors([]);
+    }
+  };
+
+  // Same body in both containers — only the shell changes with the breakpoint.
+  const Header = isMobile ? DrawerHeader : DialogHeader;
+  const Title = isMobile ? DrawerTitle : DialogTitle;
+  const Description = isMobile ? DrawerDescription : DialogDescription;
+  const Footer = isMobile ? DrawerFooter : DialogFooter;
+  const Trigger = isMobile ? DrawerTrigger : DialogTrigger;
+  const trigger = (
+    <Button type="button" variant="outline">
+      <FileUp />
+      Import users
+    </Button>
+  );
+
+  const inside = (
+    <>
+      <Header>
+        <Title>Import users</Title>
+        <Description>
+          Upload a .csv or .xlsx file. Columns: name, email, password, designation,
+          role (defaults to Employee), salary, salaryBasis (annual or monthly,
+          defaults to monthly), paidPerMonth (defaults to 1), compensatory (defaults
+          to 0). Regular leave is unpaid and uncapped, so it is never allocated.
+        </Description>
+      </Header>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Download template:</span>
@@ -249,17 +264,31 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
             </Alert>
           )}
         </div>
-        <DialogFooter>
-          <Button
-            type="button"
-            disabled={!rows || rows.length === 0 || pending}
-            onClick={importAll}
-          >
-            {pending && <Spinner />}
-            Import {rows?.length ?? 0} users
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+      </div>
+      <Footer>
+        <Button
+          type="button"
+          disabled={!rows || rows.length === 0 || pending}
+          onClick={importAll}
+        >
+          {pending && <Spinner />}
+          Import {rows?.length ?? 0} users
+        </Button>
+      </Footer>
+    </>
+  );
+
+  const rootProps = { open, onOpenChange } as const;
+
+  return isMobile ? (
+    <Drawer {...rootProps} showSwipeHandle>
+      <Trigger render={trigger} />
+      <DrawerContent>{inside}</DrawerContent>
+    </Drawer>
+  ) : (
+    <Dialog {...rootProps}>
+      <Trigger render={trigger} />
+      <DialogContent>{inside}</DialogContent>
     </Dialog>
   );
 }

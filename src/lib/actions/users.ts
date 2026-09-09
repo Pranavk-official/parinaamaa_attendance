@@ -6,6 +6,7 @@ import { prisma, prismaWithAudit } from "@/lib/prisma";
 import { mustUser, requirePermission } from "@/lib/auth-user";
 import { isLeaveExempt } from "@/lib/leave-policy";
 import { fiscalYear } from "@/lib/fiscal";
+import { getFiscalStart } from "@/lib/settings";
 import type { SalaryBasis } from "@/generated/prisma/client";
 
 // REGULAR leave is unpaid and uncapped and half days are uncapped, so PAID and
@@ -51,7 +52,7 @@ function allocationError(leave: LeaveAllocation): string | null {
 }
 
 async function setAllocations(actorId: string, userId: string, leave: LeaveAllocation) {
-  const fy = fiscalYear();
+  const fy = fiscalYear(new Date(), await getFiscalStart());
   const db = prismaWithAudit(actorId);
   for (const [leaveType, allocated, perMonth] of [
     ["PAID", 0, leave.paidPerMonth],
@@ -109,6 +110,15 @@ export async function createUserAction(input: CreateUserInput) {
       ...(input.pay ? { salary: input.pay.salary, salaryBasis: input.pay.salaryBasis } : {}),
     },
   });
+  if (input.pay) {
+    await prismaWithAudit(actor.id).salaryHistory.create({
+      data: {
+        userId: user.id,
+        salary: input.pay.salary,
+        basis: input.pay.salaryBasis,
+      },
+    });
+  }
   if (input.leave && !isLeaveExempt({ isSuperAdmin: false, role })) {
     await setAllocations(actor.id, user.id, input.leave);
   }
@@ -156,6 +166,19 @@ export async function updateUserAction(id: string, input: UpdateUserInput) {
       ...(input.pay ? { salary: input.pay.salary, salaryBasis: input.pay.salaryBasis } : {}),
     },
   });
+  if (input.pay) {
+    const changed =
+      target.salary !== input.pay.salary || target.salaryBasis !== input.pay.salaryBasis;
+    if (changed) {
+      await prismaWithAudit(actor.id).salaryHistory.create({
+        data: {
+          userId: id,
+          salary: input.pay.salary,
+          basis: input.pay.salaryBasis,
+        },
+      });
+    }
+  }
   if (input.leave && !isLeaveExempt({ isSuperAdmin: target.isSuperAdmin, role })) {
     await setAllocations(actor.id, id, input.leave);
   }

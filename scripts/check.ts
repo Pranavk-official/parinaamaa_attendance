@@ -9,6 +9,7 @@ import {
   unpaidDeduction,
 } from "../src/lib/fiscal";
 import { compensatoryEarned, leftEarly, resolveLeaveType } from "../src/lib/leave-policy";
+import { monthRange, periodRange } from "../src/lib/export-payroll";
 import {
   leaveMailBody,
   leaveMailSubject,
@@ -114,5 +115,21 @@ assert.equal(compensatoryEarned(0.9), 0); // punched straight back out
 assert.equal(leftEarly(new Date(2026, 8, 7, 13, 59)), true);
 assert.equal(leftEarly(new Date(2026, 8, 7, 14, 0)), false);
 assert.equal(leftEarly(new Date(2026, 8, 7, 18, 30)), false);
+
+// Payroll month [2 Feb, 2 Mar): label is the month key, end stays exclusive.
+const feb = monthRange(2, "2026-02");
+assert.equal(feb.start.toISOString(), "2026-02-02T00:00:00.000Z");
+assert.equal(feb.endExclusive.toISOString(), "2026-03-02T00:00:00.000Z");
+// Default (no key) points at the previous calendar month.
+const def = monthRange(2);
+assert.equal(def.label, def.start.toISOString().slice(0, 7));
+
+// A bare range wins over a month; `to` is inclusive so endExclusive is to+1 day.
+const range = periodRange(2, { month: "2026-05", from: "2026-02-07", to: "2026-03-06" });
+assert.equal(range.start.toISOString(), "2026-02-07T00:00:00.000Z");
+assert.equal(range.endExclusive.toISOString(), "2026-03-07T00:00:00.000Z");
+assert.equal(range.label, "2026-02-07-2026-03-06");
+// A garbled range falls back to the default month.
+assert.equal(periodRange(2, { from: "nope", to: "2026-03-06" }).label, def.label);
 
 console.log("fiscal checks passed");

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import { Pencil, Search, Trash2, UserPlus, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -39,15 +40,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
+import { ResponsiveConfirm } from "@/components/responsive-confirm";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
@@ -57,10 +58,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { createUserAction, updateUserAction, deleteUserAction } from "@/lib/actions/users";
 import { UsersImport } from "@/components/users-import";
 import { isLeaveExempt } from "@/lib/leave-policy";
-import type { LeaveType } from "@/generated/prisma/client";
+import type { LeaveType, SalaryBasis } from "@/generated/prisma/client";
+
+type SalaryHistoryRow = {
+  salary: number | null;
+  basis: SalaryBasis;
+  createdAt: Date;
+};
 
 type UserRow = {
   id: string;
@@ -72,6 +86,7 @@ type UserRow = {
   salary: number | null;
   annualSalary: boolean;
   leaveBalances: { leaveType: LeaveType; allocated: number; perMonth: number; used: number }[];
+  salaryHistory: SalaryHistoryRow[];
 };
 
 type RoleRow = { id: string; name: string; permissions: string[] };
@@ -182,6 +197,7 @@ function CreateUserDialog({
   roles: RoleRow[];
 }) {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
@@ -236,113 +252,122 @@ function CreateUserDialog({
     });
   };
 
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button>
-            <UserPlus />
-            Add user
-          </Button>
-        }
-      />
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add user</DialogTitle>
-          <DialogDescription>
-            Creates a new account with role, designation, salary, and leave allocation.
-            The invitee must change their password after first sign-in.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="nu-name">Name</FieldLabel>
-              <Input id="nu-name" value={name} onChange={(e) => setName(e.target.value)} required />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="nu-email">Email</FieldLabel>
-              <Input
-                id="nu-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="nu-password">Temporary password</FieldLabel>
-              <Input
-                id="nu-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                minLength={8}
-                required
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="nu-designation">Designation</FieldLabel>
-              <Input
-                id="nu-designation"
-                value={designation}
-                onChange={(e) => setDesignation(e.target.value)}
-                required
-              />
-            </Field>
-            <Field>
-              <FieldLabel>Role</FieldLabel>
-              <Select
-                value={roleId}
-                onValueChange={(v) => v && setRoleId(v)}
-                items={roles.map((r) => ({ value: r.id, label: r.name }))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <SalaryFields
-              idPrefix="nu"
-              salary={salary}
-              setSalary={setSalary}
-              annual={annual}
-              setAnnual={setAnnual}
+  // Drawer (swipeable bottom sheet) on phones, centered modal on desktop. Same
+  // form both ways — only the container changes with the breakpoint.
+  const Header = isMobile ? DrawerHeader : DialogHeader;
+  const Footer = isMobile ? DrawerFooter : DialogFooter;
+  const Title = isMobile ? DrawerTitle : DialogTitle;
+  const Description = isMobile ? DrawerDescription : DialogDescription;
+  const Trigger = isMobile ? DrawerTrigger : DialogTrigger;
+
+  const inside = (
+    <>
+      <Header>
+        <Title>Add user</Title>
+        <Description>
+          Creates a new account with role, designation, salary, and leave allocation.
+          The invitee must change their password after first sign-in.
+        </Description>
+      </Header>
+      <form className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="nu-name">Name</FieldLabel>
+            <Input id="nu-name" value={name} onChange={(e) => setName(e.target.value)} required />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="nu-email">Email</FieldLabel>
+            <Input
+              id="nu-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
             />
-            {!exempt && (
-              <LeaveAllocationFields
-                idPrefix="nu"
-                paidPerMonth={paidPerMonth}
-                setPaidPerMonth={setPaidPerMonth}
-                compensatory={compensatory}
-                setCompensatory={setCompensatory}
-              />
-            )}
-          </FieldGroup>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending}>
-              {pending && <Spinner />}
-              Create
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="nu-password">Temporary password</FieldLabel>
+            <Input
+              id="nu-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={8}
+              required
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="nu-designation">Designation</FieldLabel>
+            <Input
+              id="nu-designation"
+              value={designation}
+              onChange={(e) => setDesignation(e.target.value)}
+              required
+            />
+          </Field>
+          <Field>
+            <FieldLabel>Role</FieldLabel>
+            <Select
+              value={roleId}
+              onValueChange={(v) => v && setRoleId(v)}
+              items={roles.map((r) => ({ value: r.id, label: r.name }))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent>
+                {roles.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <SalaryFields
+            idPrefix="nu"
+            salary={salary}
+            setSalary={setSalary}
+            annual={annual}
+            setAnnual={setAnnual}
+          />
+          {!exempt && (
+            <LeaveAllocationFields
+              idPrefix="nu"
+              paidPerMonth={paidPerMonth}
+              setPaidPerMonth={setPaidPerMonth}
+              compensatory={compensatory}
+              setCompensatory={setCompensatory}
+            />
+          )}
+        </FieldGroup>
+      </form>
+      <Footer>
+        <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+        <Button type="button" disabled={pending} onClick={submit}>
+          {pending && <Spinner />}
+          Create
+        </Button>
+      </Footer>
+    </>
+  );
+
+  const rootProps = {
+    open,
+    onOpenChange: setOpen,
+  } as const;
+
+  return isMobile ? (
+    <Drawer {...rootProps} showSwipeHandle>
+      <Trigger render={<Button><UserPlus />Add user</Button>} />
+      <DrawerContent>{inside}</DrawerContent>
+    </Drawer>
+  ) : (
+    <Dialog {...rootProps}>
+      <Trigger render={<Button><UserPlus />Add user</Button>} />
+      <DialogContent>{inside}</DialogContent>
     </Dialog>
   );
 }
@@ -359,7 +384,9 @@ function EditUserDialog({
   fiscalYear: string;
 }) {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState(user.name);
   const [designation, setDesignation] = useState(user.designation ?? "");
@@ -399,95 +426,142 @@ function EditUserDialog({
     });
   };
 
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button variant="outline" size="icon" aria-label={`Edit ${user.name}`}>
-            <Pencil />
-          </Button>
-        }
-      />
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit {user.name}</DialogTitle>
-          <DialogDescription>
-            Update account details, role, salary, and leave allocation for {fiscalYear}.
-          </DialogDescription>
-        </DialogHeader>
-        {!canEdit ? (
-          <p className="text-sm text-muted-foreground">
-            Only another super admin can edit this account.
-          </p>
-        ) : (
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit();
-            }}
-          >
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="eu-name">Name</FieldLabel>
-                <Input id="eu-name" value={name} onChange={(e) => setName(e.target.value)} required />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="eu-designation">Designation</FieldLabel>
-                <Input
-                  id="eu-designation"
-                  value={designation}
-                  onChange={(e) => setDesignation(e.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel>Role</FieldLabel>
-                <Select
+  // Drawer on phones, centered modal on desktop. Same form both ways — only
+  // the container and header/footer change with the breakpoint.
+  const Header = isMobile ? DrawerHeader : DialogHeader;
+  const Footer = isMobile ? DrawerFooter : DialogFooter;
+  const Title = isMobile ? DrawerTitle : DialogTitle;
+  const Description = isMobile ? DrawerDescription : DialogDescription;
+  const Trigger = isMobile ? DrawerTrigger : DialogTrigger;
+
+  const inside = (
+    <>
+      <Header>
+        <Title>Edit {user.name}</Title>
+        <Description>
+          Update account details, role, salary, and leave allocation for {fiscalYear}.
+        </Description>
+      </Header>
+      {!canEdit ? (
+        <p className="text-sm text-muted-foreground">
+          Only another super admin can edit this account.
+        </p>
+      ) : (
+        <form className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="eu-name">Name</FieldLabel>
+              <Input id="eu-name" value={name} onChange={(e) => setName(e.target.value)} required />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="eu-designation">Designation</FieldLabel>
+              <Input
+                id="eu-designation"
+                value={designation}
+                onChange={(e) => setDesignation(e.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel>Role</FieldLabel>
+              <Select
                 value={roleId}
                 onValueChange={(v) => v && setRoleId(v)}
                 items={roles.map((r) => ({ value: r.id, label: r.name }))}
               >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        {r.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <SalaryFields
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <SalaryFields
+              idPrefix="eu"
+              salary={salary}
+              setSalary={setSalary}
+              annual={annual}
+              setAnnual={setAnnual}
+            />
+            {!exempt && (
+              <LeaveAllocationFields
                 idPrefix="eu"
-                salary={salary}
-                setSalary={setSalary}
-                annual={annual}
-                setAnnual={setAnnual}
+                paidPerMonth={paidPerMonth}
+                setPaidPerMonth={setPaidPerMonth}
+                compensatory={compensatory}
+                setCompensatory={setCompensatory}
               />
-              {!exempt && (
-                <LeaveAllocationFields
-                  idPrefix="eu"
-                  paidPerMonth={paidPerMonth}
-                  setPaidPerMonth={setPaidPerMonth}
-                  compensatory={compensatory}
-                  setCompensatory={setCompensatory}
-                />
-              )}
-            </FieldGroup>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            )}
+          </FieldGroup>
+        </form>
+      )}
+      <Footer>
+        <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+        {canEdit && (
+          <Button
+            type="button"
+            disabled={pending}
+            onClick={() => (isMobile ? setConfirmOpen(true) : submit())}
+          >
+            {pending && <Spinner />}
+            Save
+          </Button>
+        )}
+      </Footer>
+    </>
+  );
+
+  const rootProps = {
+    open,
+    onOpenChange: setOpen,
+  } as const;
+
+  const editTrigger = (
+    <Button variant="outline" size="icon" aria-label={`Edit ${user.name}`}>
+      <Pencil />
+    </Button>
+  );
+
+  return isMobile ? (
+    <Drawer {...rootProps} showSwipeHandle>
+      <Trigger render={editTrigger} />
+      <DrawerContent>
+        {inside}
+        <Drawer open={confirmOpen} onOpenChange={setConfirmOpen} modal>
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>Save changes?</DrawerTitle>
+              <DrawerDescription>
+                Update {user.name}&apos;s account, role, salary, and leave allocation.
+              </DrawerDescription>
+            </DrawerHeader>
+            <DrawerFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirmOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={pending}>
+              <Button type="button" disabled={pending} onClick={submit}>
                 {pending && <Spinner />}
-                Save
+                Confirm
               </Button>
-            </DialogFooter>
-          </form>
-        )}
-      </DialogContent>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
+      </DrawerContent>
+    </Drawer>
+  ) : (
+    <Dialog {...rootProps}>
+      <Trigger render={editTrigger} />
+      <DialogContent>{inside}</DialogContent>
     </Dialog>
   );
 }
@@ -529,23 +603,25 @@ function DeleteUserButton({
       >
         {pending ? <Spinner /> : <Trash2 />}
       </Button>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete {user.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently removes the account and all associated data including sessions,
-              attendance records, and leave history. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" disabled={pending} onClick={remove}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ResponsiveConfirm
+        open={open}
+        onOpenChange={setOpen}
+        title={`Delete ${user.name}?`}
+        description="This permanently removes the account and all associated data including sessions, attendance records, and leave history. This cannot be undone."
+        cancelDisabled={pending}
+        actions={
+          <Button
+            variant="destructive"
+            disabled={pending}
+            onClick={() => {
+              setOpen(false);
+              remove();
+            }}
+          >
+            Delete
+          </Button>
+        }
+      />
     </>
   );
 }
@@ -582,17 +658,28 @@ export function UsersPanel({
       .includes(needle);
   });
 
+  // Every visible account's salary records, newest first, for the admin view.
+  const history = visible
+    .flatMap((u) => u.salaryHistory.map((h) => ({ ...h, user: u })))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          {needle || roleFilter !== "all"
-            ? `${shown.length} of ${visible.length}`
-            : visible.length}{" "}
-          account{visible.length === 1 ? "" : "s"}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+    <Tabs defaultValue="accounts">
+      <TabsList className="w-full">
+        <TabsTrigger value="accounts">Accounts</TabsTrigger>
+        <TabsTrigger value="salary-history">Salary History</TabsTrigger>
+      </TabsList>
+      <TabsContent value="accounts" className="flex flex-col gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {needle || roleFilter !== "all"
+                ? `${shown.length} of ${visible.length}`
+                : visible.length}{" "}
+              account{visible.length === 1 ? "" : "s"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
         {/* Search and the two create paths share a row from sm up; on a phone
             they stack, because three controls do not fit next to a title. */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -730,7 +817,76 @@ export function UsersPanel({
             </TableBody>
           </Table>
         )}
-      </CardContent>
-    </Card>
+        </CardContent>
+        </Card>
+      </TabsContent>
+      <TabsContent value="salary-history" className="flex flex-col gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {history.length} salary record{history.length === 1 ? "" : "s"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {history.length === 0 ? (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <UsersRound />
+                  </EmptyMedia>
+                  <EmptyTitle>No salary history yet</EmptyTitle>
+                  <EmptyDescription>
+                    Salary changes will appear here as they are recorded.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <Table stacked>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Salary</TableHead>
+                    <TableHead className="text-right">Changed on</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {history.map((h, i) => (
+                    <TableRow key={i}>
+                      <TableCell data-label="Employee" className="font-medium">
+                        {h.user.name}
+                        <span className="block font-normal text-muted-foreground">
+                          {h.user.email}
+                        </span>
+                      </TableCell>
+                      <TableCell
+                        data-label="Salary"
+                        className="whitespace-nowrap tabular-nums"
+                      >
+                        {h.salary === null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <>
+                            {money.format(h.salary)}
+                            <span className="text-muted-foreground">
+                              {h.basis === "ANNUAL" ? " /yr" : " /mo"}
+                            </span>
+                          </>
+                        )}
+                      </TableCell>
+                      <TableCell
+                        data-label="Changed on"
+                        className="text-right text-muted-foreground"
+                      >
+                        {format(new Date(h.createdAt), "d MMM yyyy")}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+    </Tabs>
   );
 }

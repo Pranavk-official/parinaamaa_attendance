@@ -16,16 +16,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ResponsiveConfirm } from "@/components/responsive-confirm";
 
 type Session = Awaited<ReturnType<typeof authClient.listSessions>>["data"][number];
 
@@ -144,48 +135,45 @@ export function SessionsPanel() {
         </TableBody>
       </Table>
 
-      <AlertDialog open={!!confirmTarget || revokeAll} onOpenChange={() => { setTarget(null); setRevokeAll(false); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {revokeAll ? "Revoke all other sessions?" : "Revoke this session?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {revokeAll
-                ? "Every device except this one will be signed out immediately."
-                : "This device will be signed out immediately. It can sign back in with its password."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => { setTarget(null); setRevokeAll(false); }}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={pending}
-              onClick={() => {
-                startTransition(async () => {
-                  const res = revokeAll
-                    ? await authClient.revokeOtherSessions()
-                    : await authClient.revokeSession({ token: confirmTarget?.token ?? "" });
-                  if (!res.error) {
-                    toast.success(revokeAll ? "Other sessions revoked" : "Session revoked");
-                    const fresh = await authClient.listSessions();
-                    setSessions(fresh.data ?? []);
-                  } else {
-                    toast.error(res.error.message ?? "Failed");
-                  }
-                  setTarget(null);
-                  setRevokeAll(false);
-                });
-              }}
-            >
-              {pending && <Spinner />}
-              Revoke
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ResponsiveConfirm
+        open={!!confirmTarget || revokeAll}
+        onOpenChange={() => {
+          setTarget(null);
+          setRevokeAll(false);
+        }}
+        title={revokeAll ? "Revoke all other sessions?" : "Revoke this session?"}
+        description={
+          revokeAll
+            ? "Every device except this one will be signed out immediately."
+            : "This device will be signed out immediately. It can sign back in with its password."
+        }
+        cancelDisabled={pending}
+        actions={
+          <Button
+            variant="destructive"
+            disabled={pending}
+            onClick={() => {
+              startTransition(async () => {
+                const res = revokeAll
+                  ? await authClient.revokeOtherSessions()
+                  : await authClient.revokeSession({ token: confirmTarget?.token ?? "" });
+                if (!res.error) {
+                  toast.success(revokeAll ? "Other sessions revoked" : "Session revoked");
+                  const fresh = await authClient.listSessions();
+                  setSessions(fresh.data ?? []);
+                } else {
+                  toast.error(res.error.message ?? "Failed");
+                }
+                setTarget(null);
+                setRevokeAll(false);
+              });
+            }}
+          >
+            {pending && <Spinner />}
+            Revoke
+          </Button>
+        }
+      />
     </div>
   );
 }

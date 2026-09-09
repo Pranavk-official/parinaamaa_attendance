@@ -13,9 +13,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export function QrScanner() {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -99,40 +109,56 @@ export function QrScanner() {
     [start],
   );
 
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) stop();
+  };
+
+  const Header = isMobile ? DrawerHeader : DialogHeader;
+  const Title = isMobile ? DrawerTitle : DialogTitle;
+  const Description = isMobile ? DrawerDescription : DialogDescription;
+  const Trigger = isMobile ? DrawerTrigger : DialogTrigger;
+  const trigger = (
+    <Button type="button" variant="outline" className="w-full">
+      <ScanLine />
+      Scan office QR to punch
+    </Button>
+  );
+
+  const inside = (
+    <>
+      <Header>
+        <Title>Scan the office QR</Title>
+        <Description>
+          Point the camera at the badge by the entrance. It punches you in as soon
+          as it reads.
+        </Description>
+      </Header>
+      <video
+        ref={attachVideo}
+        className="aspect-video w-full border object-cover"
+        muted
+        playsInline
+      />
+      {error && <p className="px-4 pb-4 text-sm text-destructive">{error}</p>}
+    </>
+  );
+
+  const rootProps = { open, onOpenChange } as const;
+
   return (
     <div className="flex flex-col gap-2">
-      <Dialog
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) stop();
-        }}
-      >
-        <DialogTrigger
-          render={
-            <Button type="button" variant="outline" className="w-full">
-              <ScanLine />
-              Scan office QR to punch
-            </Button>
-          }
-        />
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Scan the office QR</DialogTitle>
-            <DialogDescription>
-              Point the camera at the badge by the entrance. It punches you in as soon
-              as it reads.
-            </DialogDescription>
-          </DialogHeader>
-          <video
-            ref={attachVideo}
-            className="aspect-video w-full border object-cover"
-            muted
-            playsInline
-          />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-        </DialogContent>
-      </Dialog>
+      {isMobile ? (
+        <Drawer {...rootProps} showSwipeHandle>
+          <Trigger render={trigger} />
+          <DrawerContent>{inside}</DrawerContent>
+        </Drawer>
+      ) : (
+        <Dialog {...rootProps}>
+          <Trigger render={trigger} />
+          <DialogContent>{inside}</DialogContent>
+        </Dialog>
+      )}
       {!open && error && <p className="text-sm text-destructive">{error}</p>}
       <p className="text-center text-xs text-muted-foreground">
         At the office? Scan the entrance QR to punch in as WFO.

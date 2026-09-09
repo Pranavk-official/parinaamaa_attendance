@@ -43,6 +43,7 @@ import {
   isUnpaidLeave,
 } from "@/lib/leave-policy";
 import { prisma } from "@/lib/prisma";
+import { getFiscalStart } from "@/lib/settings";
 import { fiscalYear, monthsElapsedInFiscalYear, toDateOnly, countDays } from "@/lib/fiscal";
 
 function iso(d: Date) {
@@ -118,6 +119,8 @@ export default async function DashboardPage() {
 }
 
 async function AdminDashboard({ user }: { user: CurrentUser }) {
+  const start = await getFiscalStart();
+  const fy = fiscalYear(new Date(), start);
   const today = toDateOnly(new Date());
 
   const [
@@ -163,7 +166,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
         title={
           <>
             Organisation{" "}
-            <span className="text-base font-normal text-muted-foreground">FY {fiscalYear()}</span>
+            <span className="text-base font-normal text-muted-foreground">FY {fy}</span>
           </>
         }
         subtitle={`${user.designation ?? user.role?.name ?? "Administrator"} · ${today.toDateString()}`}
@@ -250,7 +253,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
         <Card>
           <CardHeader>
             <CardTitle>Monthly leave usage</CardTitle>
-            <CardDescription>Approved leave days across all staff, FY {fiscalYear()}.</CardDescription>
+            <CardDescription>Approved leave days across all staff, FY {fy}.</CardDescription>
           </CardHeader>
           <CardContent>
             <MonthlyLeaveChart data={monthlyLeaveSeries(approvedThisYear)} />
@@ -319,7 +322,8 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
 }
 
 async function EmployeeDashboard({ user }: { user: CurrentUser }) {
-  const fy = fiscalYear();
+  const start = await getFiscalStart();
+  const fy = fiscalYear(new Date(), start);
   const today = toDateOnly(new Date());
 
   const [balances, attendance, monthAttendance, leaveRequests] = await Promise.all([
@@ -418,7 +422,7 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
         </Card>
         {balanceCards.map((b) => {
           const entitled =
-            b.perMonth > 0 ? b.perMonth * monthsElapsedInFiscalYear() : b.allocated;
+            b.perMonth > 0 ? b.perMonth * monthsElapsedInFiscalYear(new Date(), start) : b.allocated;
           const remaining = entitled - b.used;
           const pct = entitled > 0 ? Math.min(100, Math.max(0, (remaining / entitled) * 100)) : 0;
           return (

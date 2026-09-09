@@ -64,6 +64,7 @@ model User {
   leaveBalances LeaveBalance[]
   leaveRequests LeaveRequest[]
   auditLogs     AuditLog[]
+  salaryHistory SalaryHistory[]
 
   @@map("user")
 }
@@ -162,10 +163,28 @@ model AuditLog {
   actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
 }
 
+model SalaryHistory {
+  id        String      @id @default(cuid())
+  userId    String
+  salary    Decimal?    @db.Decimal(12, 2)
+  basis     SalaryBasis
+  createdAt DateTime    @default(now())
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("salary_history")
+}
+
 model CompanyHoliday {
   id   String   @id @default(cuid())
   date DateTime @db.Date @unique
   name String
+}
+
+// A single row per key. Config an admin can change from the UI without a redeploy.
+model Setting {
+  key   String @id
+  value String
 }
 
 model Verification {

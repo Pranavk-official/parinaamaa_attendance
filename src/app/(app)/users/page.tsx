@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { mustUser, requirePermission } from "@/lib/auth-user";
 import { prisma } from "@/lib/prisma";
 import { fiscalYear } from "@/lib/fiscal";
+import { getFiscalStart } from "@/lib/settings";
 import { PageHeader } from "@/components/page-header";
 import { UsersPanel } from "@/components/users-panel";
 
@@ -10,7 +11,7 @@ export const metadata: Metadata = { title: "Users" };
 export default async function UsersPage() {
   const user = await mustUser();
   requirePermission(user, "manage:users");
-  const fy = fiscalYear();
+  const fy = fiscalYear(new Date(), await getFiscalStart());
 
   const [users, roles] = await Promise.all([
     prisma.user.findMany({
@@ -19,6 +20,10 @@ export default async function UsersPage() {
         leaveBalances: {
           where: { fiscalYear: fy },
           select: { leaveType: true, allocated: true, perMonth: true, used: true },
+        },
+        salaryHistory: {
+          orderBy: { createdAt: "desc" },
+          select: { salary: true, basis: true, createdAt: true },
         },
       },
       orderBy: { name: "asc" },
@@ -31,6 +36,10 @@ export default async function UsersPage() {
     ...u,
     salary: u.salary === null ? null : Number(u.salary),
     annualSalary: u.salaryBasis === "ANNUAL",
+    salaryHistory: u.salaryHistory.map((h) => ({
+      ...h,
+      salary: h.salary === null ? null : Number(h.salary),
+    })),
   }));
 
   return (

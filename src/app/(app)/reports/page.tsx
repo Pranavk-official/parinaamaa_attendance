@@ -38,10 +38,12 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
   const user = await mustUser();
   requirePermission(user, "view:reports");
 
-  const { month } = await searchParams;
-  const { label, rows } = await collectPayrollRows(
-    typeof month === "string" ? month : undefined
-  );
+  const { preset, month, from, to } = await searchParams;
+  const { label, rows } = await collectPayrollRows({
+    ...(typeof month === "string" ? { month } : {}),
+    ...(typeof from === "string" ? { from } : {}),
+    ...(typeof to === "string" ? { to } : {}),
+  });
 
   const totals = rows.reduce(
     (acc, r) => ({
@@ -64,11 +66,16 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
         <CardHeader>
           <CardTitle>Payroll export</CardTitle>
           <CardDescription>
-            Pick a month to see it below, then download it as CSV or XLSX.
+            Pick a month, or a custom date range, to see it below — then download it as CSV or XLSX.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ReportExport month={label} />
+          <ReportExport
+            preset={typeof preset === "string" ? preset : undefined}
+            month={typeof month === "string" ? month : undefined}
+            from={typeof from === "string" ? from : undefined}
+            to={typeof to === "string" ? to : undefined}
+          />
         </CardContent>
       </Card>
 

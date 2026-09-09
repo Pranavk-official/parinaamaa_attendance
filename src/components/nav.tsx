@@ -13,6 +13,7 @@ import {
   Inbox,
   LayoutDashboard,
   LogOut,
+  Settings2,
   Shield,
   Users,
 } from "lucide-react";
@@ -50,12 +51,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import {
   Sidebar,
@@ -260,22 +262,20 @@ function MoreSheet({
   onSignOut: () => void;
 }) {
   const close = () => onOpenChange(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        className="gap-0 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:hidden"
-      >
-        <SheetHeader className="flex-row items-center gap-3 border-b p-4">
+    <Drawer open={open} onOpenChange={onOpenChange} showSwipeHandle>
+      <DrawerContent className="gap-0 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+        <DrawerHeader className="flex-row items-center gap-3 border-b p-4">
           <Avatar>
             <AvatarFallback>{initials(name)}</AvatarFallback>
           </Avatar>
           <div className="grid min-w-0 flex-1">
-            <SheetTitle className="truncate text-sm">{name}</SheetTitle>
-            <SheetDescription className="truncate">{email}</SheetDescription>
+            <DrawerTitle className="truncate text-sm">{name}</DrawerTitle>
+            <DrawerDescription className="truncate">{email}</DrawerDescription>
           </div>
-        </SheetHeader>
+        </DrawerHeader>
 
         <div className="flex flex-col p-2">
           {items.map((item) => {
@@ -287,7 +287,7 @@ function MoreSheet({
                 variant="ghost"
                 onClick={close}
                 className={cn(
-                  "h-11 justify-start gap-3 rounded-none px-3 text-sm font-normal",
+                  "h-11 justify-center gap-3 rounded-none px-3 text-sm font-normal",
                   active && "bg-accent text-accent-foreground",
                 )}
                 render={
@@ -301,11 +301,8 @@ function MoreSheet({
           })}
           <Button
             variant="ghost"
-            className="h-11 justify-start gap-3 rounded-none px-3 text-sm font-normal"
-            onClick={() => {
-              close();
-              onSignOut();
-            }}
+            className="h-11 justify-center gap-3 rounded-none px-3 text-sm font-normal"
+            onClick={() => setSignOutOpen(true)}
           >
             <LogOut className="size-5" />
             Sign out
@@ -313,8 +310,41 @@ function MoreSheet({
         </div>
 
         <p className="px-4 text-center text-xs text-muted-foreground">Version {process.env.NEXT_PUBLIC_APP_VERSION}</p>
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+
+      <Drawer
+        open={signOutOpen}
+        onOpenChange={setSignOutOpen}
+        showSwipeHandle
+      >
+        <DrawerContent className="gap-0 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+          <DrawerHeader>
+            <DrawerTitle className="text-center">Sign out?</DrawerTitle>
+            <DrawerDescription className="text-center">
+              You&apos;ll need your password to sign back in.
+            </DrawerDescription>
+          </DrawerHeader>
+          <DrawerFooter className="flex-row justify-center gap-2">
+            <Button
+              onClick={() => {
+                setSignOutOpen(false);
+                close();
+                onSignOut();
+              }}
+            >
+              <LogOut className="size-4" />
+              Sign out
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setSignOutOpen(false)}
+            >
+              Keep the app open
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    </Drawer>
   );
 }
 
@@ -423,7 +453,17 @@ export function Nav({
       : []),
     ...(isEmployee
       ? []
-      : [{ label: "Settings", items: [{ href: "/security", label: "Security", icon: Shield }] }]),
+      : [
+          {
+            label: "Settings",
+            items: [
+              ...(canManageUsers
+                ? [{ href: "/settings", label: "Payroll", icon: Settings2 }]
+                : []),
+              { href: "/security", label: "Security", icon: Shield },
+            ],
+          },
+        ]),
   ];
   const items: NavItem[] = groups.flatMap((g) => g.items);
   const current = items.find((i) => i.href === pathname);

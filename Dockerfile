@@ -12,7 +12,7 @@ FROM deps AS dev
 COPY . .
 EXPOSE 3000
 ENV NODE_ENV=development
-CMD ["sh", "-c", "bunx prisma migrate deploy && bun prisma/seed.ts && bun run dev -- --hostname 0.0.0.0"]
+CMD ["sh", "-c", "bunx prisma generate && bunx prisma migrate deploy && bun prisma/seed.ts && bun run dev -- --hostname 0.0.0.0"]
 
 # ---- builder ----
 FROM deps AS builder
