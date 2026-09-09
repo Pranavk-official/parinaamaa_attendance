@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma, prismaWithAudit } from "@/lib/prisma";
-import { hasPermission, mustUser, requirePermission } from "@/lib/auth-user";
-import { isLeaveExempt, resolveLeaveType } from "@/lib/leave-policy";
+import { prisma, prismaWithAudit } from "@/lib/db/prisma";
+import { hasPermission, mustUser, requirePermission } from "@/lib/auth/auth-user";
+import { isLeaveExempt, resolveLeaveType } from "@/lib/domain/leave-policy";
 import {
   LEAVE_MAIL,
   gmailComposeUrl,
@@ -11,9 +11,9 @@ import {
   leaveMailSubject,
   rejectMailBody,
   rejectMailSubject,
-} from "@/lib/leave-mail";
-import { countDays, fiscalYear, remainingDays, toDateOnly } from "@/lib/fiscal";
-import { getFiscalStart } from "@/lib/settings";
+} from "@/lib/domain/leave-mail";
+import { countDays, fiscalYear, remainingDays, toDateOnly } from "@/lib/domain/fiscal";
+import { getFiscalStart } from "@/lib/domain/settings";
 import type { HalfDaySession, LeaveType } from "@/generated/prisma/client";
 
 export type LeaveFormInput = {

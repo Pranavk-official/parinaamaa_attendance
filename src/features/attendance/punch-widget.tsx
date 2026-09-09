@@ -6,9 +6,9 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { ResponsiveConfirm } from "@/components/responsive-confirm";
-import { QrScanner } from "@/components/qr-scanner";
-import { wfhPunchInAction, punchOutAction } from "@/lib/actions/attendance";
+import { ResponsiveConfirm } from "@/features/shell/responsive-confirm";
+import { QrScanner } from "@/features/attendance/qr-scanner";
+import { wfhPunchInAction, punchOutAction } from "@/lib/server/actions/attendance";
 import type { AttendanceType } from "@/generated/prisma/client";
 
 const TYPE_LABEL: Record<AttendanceType, string> = {

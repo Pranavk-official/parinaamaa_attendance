@@ -1,7 +1,7 @@
 // Local dummy data: fake staff with a full fiscal year of invented attendance
 // and leave. Never run this against production — use prisma/seed.prod.ts.
 import { ROLES, ensureUser, prisma, run, upsertRoles, type SeedUser } from "./seed-common";
-import { fiscalYear } from "../src/lib/fiscal";
+import { fiscalYear } from "../src/lib/domain/fiscal";
 
 // Only employees carry leave balances; admins/super admins are exempt.
 const USERS: SeedUser[] = [

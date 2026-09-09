@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser, hasPermission } from "@/lib/auth-user";
-import { isLeaveExempt } from "@/lib/leave-policy";
-import { prisma } from "@/lib/prisma";
-import { toDateOnly } from "@/lib/fiscal";
-import { Nav } from "@/components/nav";
+import { getCurrentUser, hasPermission } from "@/lib/auth/auth-user";
+import { isLeaveExempt } from "@/lib/domain/leave-policy";
+import { prisma } from "@/lib/db/prisma";
+import { toDateOnly } from "@/lib/domain/fiscal";
+import { Nav } from "@/features/shell/nav";
 
 export default async function AppLayout({
   children,

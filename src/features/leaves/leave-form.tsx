@@ -36,9 +36,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { ResponsiveConfirm } from "@/components/responsive-confirm";
-import { LEAVE_MAIL, leaveMailBody, leaveMailSubject } from "@/lib/leave-mail";
-import { submitLeaveAction } from "@/lib/actions/leave";
+import { ResponsiveConfirm } from "@/features/shell/responsive-confirm";
+import { LEAVE_MAIL, leaveMailBody, leaveMailSubject } from "@/lib/domain/leave-mail";
+import { submitLeaveAction } from "@/lib/server/actions/leave";
 import type { HalfDaySession, LeaveType } from "@/generated/prisma/client";
 
 const schema = z

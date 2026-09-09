@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 import QRCode from "qrcode";
-import { LEAVE_MAIL } from "@/lib/leave-mail";
+import { LEAVE_MAIL } from "@/lib/domain/leave-mail";
 
 export const alt = "Attendance — scan to punch in at the office";
 export const size = { width: 1200, height: 630 };

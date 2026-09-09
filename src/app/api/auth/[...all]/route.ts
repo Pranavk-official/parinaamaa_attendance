@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { auth } from "@/lib/auth/auth";
 
 export function GET(request: Request) {
   return auth.handler(request);

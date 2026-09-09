@@ -1,12 +1,12 @@
-import { prisma } from "@/lib/prisma";
-import { getFiscalStart } from "@/lib/settings";
-import { countDays, fiscalYear, remainingDays, toDateOnly, type FiscalStart } from "@/lib/fiscal";
+import { prisma } from "@/lib/db/prisma";
+import { getFiscalStart } from "@/lib/domain/settings";
+import { countDays, fiscalYear, remainingDays, toDateOnly, type FiscalStart } from "@/lib/domain/fiscal";
 import {
   compensatoryEarned,
   isLeaveExempt,
   leftEarly,
   resolveLeaveType,
-} from "@/lib/leave-policy";
+} from "@/lib/domain/leave-policy";
 import type { AttendanceType } from "@/generated/prisma/client";
 
 export async function punchIn(userId: string, preferred: "WFO" | "WFH") {

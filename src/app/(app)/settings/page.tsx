@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { mustUser, requirePermission } from "@/lib/auth-user";
-import { getPayrollDay, getFiscalStart } from "@/lib/settings";
-import { PageHeader } from "@/components/page-header";
+import { mustUser, requirePermission } from "@/lib/auth/auth-user";
+import { getPayrollDay, getFiscalStart } from "@/lib/domain/settings";
+import { PageHeader } from "@/features/shell/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PayrollSettings } from "@/components/payroll-settings";
-import { FiscalYearSettings } from "@/components/fiscal-year-settings";
+import { PayrollSettings } from "@/features/billing/payroll-settings";
+import { FiscalYearSettings } from "@/features/shell/fiscal-year-settings";
 
 export const metadata: Metadata = { title: "Settings" };
 

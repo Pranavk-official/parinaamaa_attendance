@@ -11,8 +11,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { fiscalYear, fiscalYearRange, type FiscalStart } from "@/lib/fiscal";
-import { updateFiscalStartAction } from "@/lib/actions/settings";
+import { fiscalYear, fiscalYearRange, type FiscalStart } from "@/lib/domain/fiscal";
+import { updateFiscalStartAction } from "@/lib/server/actions/settings";
 
 // Pick any date — only its month and day are remembered. The year repeats.
 export function FiscalYearSettings({ start }: { start: FiscalStart }) {

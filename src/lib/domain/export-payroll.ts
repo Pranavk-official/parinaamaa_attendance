@@ -1,11 +1,11 @@
 // Pure date-range math lives in fiscal.ts so scripts/check.ts can assert it
 // without pulling in the Prisma client; re-exported here for the app.
-export { monthRange, periodRange } from "@/lib/fiscal";
-import { periodRange, type PayrollPeriod } from "@/lib/fiscal";
-import { prisma } from "@/lib/prisma";
-import { countDays, unpaidDeduction } from "@/lib/fiscal";
-import { EMPLOYEE_WHERE, isUnpaidLeave } from "@/lib/leave-policy";
-import { getPayrollDay } from "@/lib/settings";
+export { monthRange, periodRange } from "@/lib/domain/fiscal";
+import { periodRange, type PayrollPeriod } from "@/lib/domain/fiscal";
+import { prisma } from "@/lib/db/prisma";
+import { countDays, unpaidDeduction } from "@/lib/domain/fiscal";
+import { EMPLOYEE_WHERE, isUnpaidLeave } from "@/lib/domain/leave-policy";
+import { getPayrollDay } from "@/lib/domain/settings";
 
 export type PayrollRow = {
   name: string;

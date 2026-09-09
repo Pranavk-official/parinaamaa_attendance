@@ -1,8 +1,8 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { auth } from "../src/lib/auth";
-import { fiscalYear } from "../src/lib/fiscal";
+import { auth } from "../src/lib/auth/auth";
+import { fiscalYear } from "../src/lib/domain/fiscal";
 
 export const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),

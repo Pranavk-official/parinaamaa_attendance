@@ -1,6 +1,6 @@
 import { ScrollText } from "lucide-react";
-import { mustUser, requirePermission } from "@/lib/auth-user";
-import { prisma } from "@/lib/prisma";
+import { mustUser, requirePermission } from "@/lib/auth/auth-user";
+import { prisma } from "@/lib/db/prisma";
 import {
   Table,
   TableBody,
@@ -18,7 +18,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/features/shell/page-header";
 
 function jsonSummary(v: unknown): string {
   if (v == null) return "-";

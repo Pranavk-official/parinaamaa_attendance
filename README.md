@@ -59,8 +59,8 @@ files read it. Generate secrets with `openssl rand -hex 32`.
 | Leave email recipient, Cc, and the greeting name | `src/lib/leave-mail.ts` (`LEAVE_MAIL`) |
 | Wording of the request, approval and rejection emails | `src/lib/leave-mail.ts` |
 | Which leave types carry a balance | `src/lib/leave-policy.ts` (`ALLOCATABLE_LEAVE_TYPES`) |
-| Loss-of-pay formula | `src/lib/fiscal.ts` (`unpaidDeduction`) |
-| Fiscal year (April–March) | `src/lib/fiscal.ts` |
+| Loss-of-pay formula | `src/lib/domain/fiscal.ts` (`unpaidDeduction`) |
+| Fiscal year (April–March) | `src/lib/domain/fiscal.ts` |
 | Roles and their permissions | `prisma/seed-common.ts` (`ROLES`) |
 | Payroll export schedule | `ofelia.job-exec.payroll.schedule` in `docker-compose.yml` |
 
@@ -256,7 +256,7 @@ Scanning it punches the visitor in straight away. Two things gate it:
 Scanning twice in a day is harmless: the second scan reports the existing punch
 rather than creating a second one.
 
-The login page's Open Graph image (`src/app/login/opengraph-image.tsx`) renders
+The login page's Open Graph image (`src/app/(auth)/login/opengraph-image.tsx`) renders
 this same QR from `BETTER_AUTH_URL`, so sharing the login link in Slack or
 WhatsApp shows a scannable poster. Print from there, or generate your own from
 the URL above.
@@ -282,7 +282,7 @@ punching in as WFO does not mean going back through the login page.
 
 Better Auth slides the expiry forward on activity, so an active session keeps
 renewing up to its ceiling and an idle one falls off at it. The ceilings are set
-in the session-create hook in `src/lib/auth.ts`; the 2-hour refresh is
+in the session-create hook in `src/lib/auth/auth.ts`; the 2-hour refresh is
 `session.updateAge`.
 
 ### Leave
@@ -363,7 +363,7 @@ the divisor in `unpaidDeduction` if payroll switches to working days.
 - **Prisma 7** — import from `@/generated/prisma/client`, never `@prisma/client`.
   Every `PrismaClient` needs the `@prisma/adapter-pg` driver adapter. Config is
   in `prisma7.config.ts`.
-- **Server mutations** are server actions in `src/lib/actions/*`. Writes to
+- **Server mutations** are server actions in `src/lib/server/actions/*`. Writes to
   `Attendance` and `LeaveBalance` go through `prismaWithAudit(actorId)`.
 - **UI** — build from `src/components/ui/*`. Add new primitives with the shadcn
   CLI; the style is `base-lyra`, not classic Radix shadcn. Tailwind v4 is

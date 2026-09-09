@@ -18,8 +18,8 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
-import { authClient } from "@/lib/auth-client";
-import { punchOutAction } from "@/lib/actions/attendance";
+import { authClient } from "@/lib/auth/auth-client";
+import { punchOutAction } from "@/lib/server/actions/attendance";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -58,7 +58,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import { ThemeSwitcher } from "@/components/theme-switcher";
+import { ThemeSwitcher } from "@/features/shell/theme-switcher";
 import {
   Sidebar,
   SidebarContent,
@@ -99,15 +99,7 @@ function initials(name: string) {
     .join("");
 }
 
-function SignOutDialog({
-  open,
-  onOpenChange,
-  canPunchOut,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  canPunchOut: boolean;
-}) {
+function useSignOut() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -120,6 +112,31 @@ function SignOutDialog({
         },
       },
     });
+
+  const signOutAfterPunch = (done: () => void) =>
+    startTransition(async () => {
+      const res = await punchOutAction();
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      done();
+      signOut();
+    });
+
+  return { pending, signOut, signOutAfterPunch };
+}
+
+function SignOutDialog({
+  open,
+  onOpenChange,
+  canPunchOut,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  canPunchOut: boolean;
+}) {
+  const { pending, signOut, signOutAfterPunch } = useSignOut();
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -148,17 +165,7 @@ function SignOutDialog({
             <AlertDialogAction
               variant="destructive"
               disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  const res = await punchOutAction();
-                  if (res.error) {
-                    toast.error(res.error);
-                    return;
-                  }
-                  onOpenChange(false);
-                  signOut();
-                })
-              }
+            onClick={() => signOutAfterPunch(() => onOpenChange(false))}
             >
               {pending && <Spinner />}
               Punch out and sign out
@@ -251,7 +258,7 @@ function MoreSheet({
   pathname,
   name,
   email,
-  onSignOut,
+  canPunchOut,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -259,10 +266,15 @@ function MoreSheet({
   pathname: string;
   name: string;
   email: string;
-  onSignOut: () => void;
+  canPunchOut: boolean;
 }) {
   const close = () => onOpenChange(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
+  const { pending, signOut, signOutAfterPunch } = useSignOut();
+  const closeAll = () => {
+    setSignOutOpen(false);
+    close();
+  };
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} showSwipeHandle>
@@ -321,22 +333,36 @@ function MoreSheet({
           <DrawerHeader>
             <DrawerTitle className="text-center">Sign out?</DrawerTitle>
             <DrawerDescription className="text-center">
-              You&apos;ll need your password to sign back in.
-            </DrawerDescription>
+            {canPunchOut
+              ? "You are still punched in for today. Sign out on its own leaves the day open."
+              : "You&apos;ll need your password to sign back in."}
+          </DrawerDescription>
           </DrawerHeader>
-          <DrawerFooter className="flex-row justify-center gap-2">
+          <DrawerFooter className="flex-col items-stretch">
             <Button
+              variant={canPunchOut ? "outline" : "destructive"}
+              disabled={pending}
               onClick={() => {
-                setSignOutOpen(false);
-                close();
-                onSignOut();
+                closeAll();
+                signOut();
               }}
             >
               <LogOut className="size-4" />
               Sign out
             </Button>
+            {canPunchOut && (
+              <Button
+                variant="destructive"
+                disabled={pending}
+                onClick={() => signOutAfterPunch(closeAll)}
+              >
+                {pending && <Spinner />}
+                Punch out and sign out
+              </Button>
+            )}
             <Button
               variant="outline"
+              disabled={pending}
               onClick={() => setSignOutOpen(false)}
             >
               Keep the app open
@@ -570,7 +596,7 @@ export function Nav({
         pathname={pathname}
         name={name}
         email={email}
-        onSignOut={() => setSigningOut(true)}
+        canPunchOut={canPunchOut}
       />
       <SignOutDialog open={signingOut} onOpenChange={setSigningOut} canPunchOut={canPunchOut} />
     </SidebarProvider>

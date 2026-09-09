@@ -7,15 +7,15 @@ import {
   monthsElapsedInFiscalYear,
   remainingDays,
   unpaidDeduction,
-} from "../src/lib/fiscal";
-import { compensatoryEarned, leftEarly, resolveLeaveType } from "../src/lib/leave-policy";
-import { monthRange, periodRange } from "../src/lib/export-payroll";
+} from "../src/lib/domain/fiscal";
+import { compensatoryEarned, leftEarly, resolveLeaveType } from "../src/lib/domain/leave-policy";
+import { monthRange, periodRange } from "../src/lib/domain/export-payroll";
 import {
   leaveMailBody,
   leaveMailSubject,
   rejectMailBody,
   rejectMailSubject,
-} from "../src/lib/leave-mail";
+} from "../src/lib/domain/leave-mail";
 
 // April 1 2026 rallies to 2026-2027
 assert.equal(fiscalYear(new Date(2026, 3, 1)), "2026-2027");
@@ -88,7 +88,7 @@ assert.ok(rejectMailBody(decision).startsWith("Dear Dev Patel,"));
 assert.ok(rejectMailSubject({ ...decision, endDate: decision.startDate }).endsWith("2026-09-14"));
 
 // The import template's header must match the columns the parser reads.
-const templateHeader = readFileSync("src/components/users-import.tsx", "utf8")
+const templateHeader = readFileSync("src/features/users/users-import.tsx", "utf8")
   .match(/"(name,email,[^"]+)"/)?.[1]
   ?.split(",") ?? [];
 for (const column of [

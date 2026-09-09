@@ -28,16 +28,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Prisma 7 (not v6)
 - `generator client` = `prisma-client`, outputs to `src/generated/prisma`. **Import from `@/generated/prisma/client`, never `@prisma/client`** — that package is the legacy v6 import.
-- Prisma 7 requires a **driver adapter** (`@prisma/adapter-pg`). Every new `PrismaClient` must pass `adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })` (see `src/lib/prisma.ts`, `prisma/seed.ts`).
+- Prisma 7 requires a **driver adapter** (`@prisma/adapter-pg`). Every new `PrismaClient` must pass `adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })` (see `src/lib/db/prisma.ts`, `prisma/seed.ts`).
 - Config lives in `prisma7.config.ts` (schema + migrations + datasource). DB is postgres, provided by docker compose.
 - Import types/enums from `@/generated/prisma/client` (e.g. `AttendanceType`, `LeaveType`).
 
 ## Auth & access
-- Better Auth in `src/lib/auth.ts` (adapter = prismaAdapter). Route handler already wired at `src/app/api/auth/[...all]/route.ts`.
-- `getCurrentUser()` (react `cache``d) in `src/lib/auth-user.ts`; `mustUser()`, `hasPermission()`, `requirePermission()` helpers there.
+- Better Auth in `src/lib/auth/auth.ts` (adapter = prismaAdapter). Route handler already wired at `src/app/api/auth/[...all]/route.ts`.
+- `getCurrentUser()` (react `cache``d) in `src/lib/auth/auth-user.ts`; `mustUser()`, `hasPermission()`, `requirePermission()` helpers there.
 - App routes live under `src/app/(app)/` and are gated in its `layout.tsx` (redirect to `/login` if no user).
 - `src/proxy.ts` is a Next proxy map protecting `/attendance/wfo-punch`.
-- Server mutations are **server actions** in `src/lib/actions/*`. Audit logging for `Attendance`/`LeaveBalance` writes goes through `prismaWithAudit(actorId)` in `src/lib/prisma.ts`.
+- Server mutations are **server actions** in `src/lib/server/actions/*`. Audit logging for `Attendance`/`LeaveBalance` writes goes through `prismaWithAudit(actorId)` in `src/lib/db/prisma.ts`.
 
 ## Env / DB / infra
 - Copy `.env.example` → `.env`. Ops secrets: `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET` (≥32 chars), `BETTER_AUTH_URL`, `OFFICE_IP_ADDRESS` (WFO punch-in IP guard), `CRON_SECRET`, `MANAGER_EMAIL` (leave manager notification).

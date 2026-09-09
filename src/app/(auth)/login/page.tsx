@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { CalendarCheck } from "lucide-react";
-import { LoginForm } from "@/components/login-form";
-import { QrScanner } from "@/components/qr-scanner";
+import { LoginForm } from "@/features/shell/login-form";
+import { QrScanner } from "@/features/attendance/qr-scanner";
 
 export const metadata: Metadata = { title: "Sign in" };
 

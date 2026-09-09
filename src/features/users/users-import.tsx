@@ -28,7 +28,7 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { createUserAction } from "@/lib/actions/users";
+import { createUserAction } from "@/lib/server/actions/users";
 
 type RoleRow = { id: string; name: string };
 
@@ -69,7 +69,8 @@ type ParsedRow = {
   annualSalary: boolean;
 };
 
-// Blank cells fall back to the default; anything else must be a real number.
+// Headers may be CAPITAL, Title Case, camelCase, or PascalCase.
+const canon = (h: unknown) => String(h ?? "").toLowerCase().replace(/[^a-z]/g, "");
 function num(v: unknown, fallback: number): number | null {
   const raw = String(v ?? "").trim();
   if (!raw) return fallback;
@@ -96,17 +97,19 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
       const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
       const parsed: ParsedRow[] = [];
       const errs: string[] = [];
-      json.forEach((r, i) => {
+      json.forEach((raw, i) => {
+        const r: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(raw)) r[canon(k)] = v;
         const name = String(r.name ?? "").trim();
         const email = String(r.email ?? "").trim();
         const password = String(r.password ?? "").trim();
         const designation = String(r.designation ?? "").trim();
         const role = String(r.role ?? "Employee").trim();
-        const paidPerMonth = num(r.paidPerMonth, 1);
+        const paidPerMonth = num(r.paidpermonth, 1);
         const compensatory = num(r.compensatory, 0);
         const salaryRaw = String(r.salary ?? "").trim();
         const salary = salaryRaw === "" ? null : num(salaryRaw, 0);
-        const annualSalary = /^(annual|ctc|yearly|y)$/i.test(String(r.salaryBasis ?? "").trim());
+        const annualSalary = /^(annual|ctc|yearly|y)$/i.test(String(r.salarybasis ?? "").trim());
         if (!name || !email || !password) {
           errs.push(`Row ${i + 2}: name, email, password required`);
           return;
@@ -207,7 +210,7 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
           Upload a .csv or .xlsx file. Columns: name, email, password, designation,
           role (defaults to Employee), salary, salaryBasis (annual or monthly,
           defaults to monthly), paidPerMonth (defaults to 1), compensatory (defaults
-          to 0). Regular leave is unpaid and uncapped, so it is never allocated.
+          to 0). Header casing does not matter. Regular leave is unpaid and uncapped, so it is never allocated.
         </Description>
       </Header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">

@@ -11,7 +11,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { updatePayrollDayAction } from "@/lib/actions/settings";
+import { updatePayrollDayAction } from "@/lib/server/actions/settings";
 
 const ordinal = (n: number) =>
   `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["st", "nd", "rd"][(n - 1) % 10] ?? "th"}`;

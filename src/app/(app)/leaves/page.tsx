@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { CalendarPlus, Inbox } from "lucide-react";
-import { mustUser, hasPermission } from "@/lib/auth-user";
-import { prisma } from "@/lib/prisma";
-import { countDays } from "@/lib/fiscal";
-import { isLeaveExempt } from "@/lib/leave-policy";
+import { mustUser, hasPermission } from "@/lib/auth/auth-user";
+import { prisma } from "@/lib/db/prisma";
+import { countDays } from "@/lib/domain/fiscal";
+import { isLeaveExempt } from "@/lib/domain/leave-policy";
 import type { HalfDaySession } from "@/generated/prisma/client";
 import {
   Table,
@@ -23,8 +23,8 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { PageHeader } from "@/components/page-header";
-import { LeaveActions, LeaveDelete } from "@/components/leave-actions";
+import { PageHeader } from "@/features/shell/page-header";
+import { LeaveActions, LeaveDelete } from "@/features/leaves/leave-actions";
 
 /** Status carries its own label, so colour here is reinforcement, not the signal. */
 const STATUS_CLASS: Record<string, string> = {

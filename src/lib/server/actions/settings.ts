@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { mustUser, requirePermission } from "@/lib/auth-user";
-import { setPayrollDay, setFiscalStart } from "@/lib/settings";
-import { fiscalStartToKey, type FiscalStart } from "@/lib/fiscal";
+import { mustUser, requirePermission } from "@/lib/auth/auth-user";
+import { setPayrollDay, setFiscalStart } from "@/lib/domain/settings";
+import { fiscalStartToKey, type FiscalStart } from "@/lib/domain/fiscal";
 
 export async function updatePayrollDayAction(day: number) {
   const actor = await mustUser();

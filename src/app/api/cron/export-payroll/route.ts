@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { collectPayrollRows, payrollToCSV } from "@/lib/export-payroll";
+import { collectPayrollRows, payrollToCSV } from "@/lib/domain/export-payroll";
 
 export async function POST(request: Request) {
   const auth = request.headers.get("authorization");

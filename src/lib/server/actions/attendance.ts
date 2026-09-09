@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { punchIn, punchOut } from "@/lib/punch";
-import { mustUser } from "@/lib/auth-user";
-import { isLeaveExempt } from "@/lib/leave-policy";
+import { punchIn, punchOut } from "@/lib/domain/punch";
+import { mustUser } from "@/lib/auth/auth-user";
+import { isLeaveExempt } from "@/lib/domain/leave-policy";
 
 export async function wfhPunchInAction() {
   const user = await mustUser();

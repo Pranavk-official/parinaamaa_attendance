@@ -14,14 +14,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { LEAVE_MAIL, rejectMailBody, rejectMailSubject } from "@/lib/leave-mail";
-import { ResponsiveConfirm } from "@/components/responsive-confirm";
+import { LEAVE_MAIL, rejectMailBody, rejectMailSubject } from "@/lib/domain/leave-mail";
+import { ResponsiveConfirm } from "@/features/shell/responsive-confirm";
 import { useRouter } from "next/navigation";
 import {
   approveLeaveAction,
   deleteLeaveAction,
   rejectLeaveAction,
-} from "@/lib/actions/leave";
+} from "@/lib/server/actions/leave";
 
 /** Only a pending request can go; an approved one has already spent balance. */
 export function LeaveDelete({ id }: { id: string }) {

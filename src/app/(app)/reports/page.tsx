@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { mustUser, requirePermission } from "@/lib/auth-user";
-import { collectPayrollRows } from "@/lib/export-payroll";
+import { mustUser, requirePermission } from "@/lib/auth/auth-user";
+import { collectPayrollRows } from "@/lib/domain/export-payroll";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -18,8 +18,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Inbox } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
-import { ReportExport } from "@/components/report-export";
+import { PageHeader } from "@/features/shell/page-header";
+import { ReportExport } from "@/features/billing/report-export";
 
 export const metadata: Metadata = { title: "Reports" };
 

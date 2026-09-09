@@ -32,19 +32,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PageHeader } from "@/components/page-header";
-import { PunchWidget } from "@/components/punch-widget";
-import { DailySplitChart, MonthlyLeaveChart } from "@/components/charts";
-import { mustUser, type CurrentUser } from "@/lib/auth-user";
+import { PageHeader } from "@/features/shell/page-header";
+import { PunchWidget } from "@/features/attendance/punch-widget";
+import { DailySplitChart, MonthlyLeaveChart } from "@/features/billing/charts";
+import { mustUser, type CurrentUser } from "@/lib/auth/auth-user";
 import {
   ALLOCATABLE_LEAVE_TYPES,
   EMPLOYEE_WHERE,
   isLeaveExempt,
   isUnpaidLeave,
-} from "@/lib/leave-policy";
-import { prisma } from "@/lib/prisma";
-import { getFiscalStart } from "@/lib/settings";
-import { fiscalYear, monthsElapsedInFiscalYear, toDateOnly, countDays } from "@/lib/fiscal";
+} from "@/lib/domain/leave-policy";
+import { prisma } from "@/lib/db/prisma";
+import { getFiscalStart } from "@/lib/domain/settings";
+import { fiscalYear, monthsElapsedInFiscalYear, toDateOnly, countDays } from "@/lib/domain/fiscal";
 
 function iso(d: Date) {
   return toDateOnly(d).toISOString().slice(0, 10);

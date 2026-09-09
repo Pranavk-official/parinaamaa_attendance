@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/page-header";
-import { SessionsPanel } from "@/components/sessions-panel";
+import { PageHeader } from "@/features/shell/page-header";
+import { SessionsPanel } from "@/features/attendance/sessions-panel";
 
 export const metadata: Metadata = { title: "Security" };
 

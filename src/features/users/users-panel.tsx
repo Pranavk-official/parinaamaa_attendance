@@ -48,7 +48,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { ResponsiveConfirm } from "@/components/responsive-confirm";
+import { ResponsiveConfirm } from "@/features/shell/responsive-confirm";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
@@ -65,9 +65,9 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { createUserAction, updateUserAction, deleteUserAction } from "@/lib/actions/users";
-import { UsersImport } from "@/components/users-import";
-import { isLeaveExempt } from "@/lib/leave-policy";
+import { createUserAction, updateUserAction, deleteUserAction } from "@/lib/server/actions/users";
+import { UsersImport } from "@/features/users/users-import";
+import { isLeaveExempt } from "@/lib/domain/leave-policy";
 import type { LeaveType, SalaryBasis } from "@/generated/prisma/client";
 
 type SalaryHistoryRow = {

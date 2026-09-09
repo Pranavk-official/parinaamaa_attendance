@@ -1,12 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
-import { prisma, prismaWithAudit } from "@/lib/prisma";
-import { mustUser, requirePermission } from "@/lib/auth-user";
-import { isLeaveExempt } from "@/lib/leave-policy";
-import { fiscalYear } from "@/lib/fiscal";
-import { getFiscalStart } from "@/lib/settings";
+import { auth } from "@/lib/auth/auth";
+import { prisma, prismaWithAudit } from "@/lib/db/prisma";
+import { mustUser, requirePermission } from "@/lib/auth/auth-user";
+import { isLeaveExempt } from "@/lib/domain/leave-policy";
+import { fiscalYear } from "@/lib/domain/fiscal";
+import { getFiscalStart } from "@/lib/domain/settings";
 import type { SalaryBasis } from "@/generated/prisma/client";
 
 // REGULAR leave is unpaid and uncapped and half days are uncapped, so PAID and

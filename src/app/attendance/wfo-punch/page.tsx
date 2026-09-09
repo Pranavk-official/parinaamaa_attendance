@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { getCurrentUser } from "@/lib/auth-user";
-import { isLeaveExempt } from "@/lib/leave-policy";
-import { punchIn } from "@/lib/punch";
+import { getCurrentUser } from "@/lib/auth/auth-user";
+import { isLeaveExempt } from "@/lib/domain/leave-policy";
+import { punchIn } from "@/lib/domain/punch";
 import {
   Card,
   CardContent,
@@ -14,7 +14,7 @@ import {
 import Link from "next/link";
 import { CheckCircle2, Clock, LayoutDashboard, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PunchWidget } from "@/components/punch-widget";
+import { PunchWidget } from "@/features/attendance/punch-widget";
 import type { AttendanceType } from "@/generated/prisma/client";
 
 export const metadata: Metadata = { title: "Office Punch" };

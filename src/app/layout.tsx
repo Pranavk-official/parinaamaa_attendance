@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
-import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeProvider } from "@/features/shell/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { InstallPrompt } from "@/components/install-prompt";
+import { InstallPrompt } from "@/features/shell/install-prompt";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 

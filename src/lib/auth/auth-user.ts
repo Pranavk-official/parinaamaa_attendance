@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { auth } from "@/lib/auth/auth";
 import type { User } from "@/generated/prisma/client";
 
 export interface CurrentUser {
@@ -18,7 +18,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   });
   if (!session?.user) return null;
   const user = session.user as User & { designation?: string | null };
-  const prismaUser = await (await import("@/lib/prisma")).prisma.user.findUnique({
+  const prismaUser = await (await import("@/lib/db/prisma")).prisma.user.findUnique({
     where: { id: user.id },
     include: { role: true },
   });

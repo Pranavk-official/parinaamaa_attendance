@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { ShieldX } from "lucide-react";
-import { authClient } from "@/lib/auth-client";
+import { authClient } from "@/lib/auth/auth-client";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ResponsiveConfirm } from "@/components/responsive-confirm";
+import { ResponsiveConfirm } from "@/features/shell/responsive-confirm";
 
 type Session = Awaited<ReturnType<typeof authClient.listSessions>>["data"][number];
 

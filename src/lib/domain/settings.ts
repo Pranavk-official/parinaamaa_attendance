@@ -1,6 +1,6 @@
 import { cache } from "react";
-import { prisma, prismaWithAudit } from "@/lib/prisma";
-import { fiscalStartToKey, type FiscalStart } from "@/lib/fiscal";
+import { prisma, prismaWithAudit } from "@/lib/db/prisma";
+import { fiscalStartToKey, type FiscalStart } from "@/lib/domain/fiscal";
 
 // Salary month runs from the Nth of month M to the day before N of month M+1.
 // N=1 is a plain calendar month; N=2 is the "paid on the 2nd" cycle.

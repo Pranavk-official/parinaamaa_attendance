@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, hasPermission } from "@/lib/auth-user";
-import { collectPayrollRows, payrollToCSV, payrollToXLSX } from "@/lib/export-payroll";
+import { getCurrentUser, hasPermission } from "@/lib/auth/auth-user";
+import { collectPayrollRows, payrollToCSV, payrollToXLSX } from "@/lib/domain/export-payroll";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
