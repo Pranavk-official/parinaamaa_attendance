@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Pencil, Search, UserPlus, UsersRound } from "lucide-react";
+import { Pencil, Search, Trash2, UserPlus, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
@@ -47,7 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createUserAction, updateUserAction } from "@/lib/actions/users";
+import { createUserAction, updateUserAction, deleteUserAction } from "@/lib/actions/users";
 import { UsersImport } from "@/components/users-import";
 import { isLeaveExempt } from "@/lib/leave-policy";
 import type { LeaveType } from "@/generated/prisma/client";
@@ -482,6 +492,64 @@ function EditUserDialog({
   );
 }
 
+function DeleteUserButton({
+  user,
+  canDelete,
+}: {
+  user: UserRow;
+  canDelete: boolean;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
+
+  if (!canDelete) return null;
+
+  const remove = () => {
+    setOpen(false);
+    startTransition(async () => {
+      const res = await deleteUserAction(user.id);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("User deleted");
+      router.refresh();
+    });
+  };
+
+  return (
+    <>
+      <Button
+        size="icon"
+        variant="outline"
+        disabled={pending}
+        aria-label={`Delete ${user.name}`}
+        onClick={() => setOpen(true)}
+      >
+        {pending ? <Spinner /> : <Trash2 />}
+      </Button>
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {user.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the account and all associated data including sessions,
+              attendance records, and leave history. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={pending} onClick={remove}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 export function UsersPanel({
   currentUserId,
   isSuperAdmin,
@@ -496,29 +564,32 @@ export function UsersPanel({
   fiscalYear: string;
 }) {
   const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
   const assignableRoles = isSuperAdmin
     ? roles
     : roles.filter((r) => r.name !== "Super Admin");
 
-  // A phone shows one account per card, so a directory of any size is
-  // unreachable by scrolling alone. Client-side is enough: the page already
-  // ships every row.
+  // Non-super-admins cannot see or manage super admin accounts.
+  const visible = isSuperAdmin ? users : users.filter((u) => !u.isSuperAdmin);
+
   const needle = query.trim().toLowerCase();
-  const shown = needle
-    ? users.filter((u) =>
-        [u.name, u.email, u.designation, u.role?.name]
-          .join(" ")
-          .toLowerCase()
-          .includes(needle),
-      )
-    : users;
+  const shown = visible.filter((u) => {
+    if (roleFilter !== "all" && u.role?.id !== roleFilter) return false;
+    if (!needle) return true;
+    return [u.name, u.email, u.designation, u.role?.name]
+      .join(" ")
+      .toLowerCase()
+      .includes(needle);
+  });
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>
-          {needle ? `${shown.length} of ${users.length}` : users.length} account
-          {users.length === 1 ? "" : "s"}
+          {needle || roleFilter !== "all"
+            ? `${shown.length} of ${visible.length}`
+            : visible.length}{" "}
+          account{visible.length === 1 ? "" : "s"}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -531,12 +602,32 @@ export function UsersPanel({
             </InputGroupAddon>
             <InputGroupInput
               type="search"
-              placeholder="Search name, email, role"
+              placeholder="Search name, email, designation"
               aria-label="Search accounts"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </InputGroup>
+          <Select
+            value={roleFilter}
+            onValueChange={(v) => setRoleFilter(v ?? "all")}
+            items={[
+              { value: "all", label: "All roles" },
+              ...assignableRoles.map((r) => ({ value: r.id, label: r.name })),
+            ]}
+          >
+            <SelectTrigger className="w-full sm:w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All roles</SelectItem>
+              {assignableRoles.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <div className="grid grid-cols-2 gap-2 sm:ml-auto sm:flex">
             <UsersImport roles={assignableRoles} />
             <CreateUserDialog roles={assignableRoles} />
@@ -551,7 +642,9 @@ export function UsersPanel({
               </EmptyMedia>
               <EmptyTitle>No matching accounts</EmptyTitle>
               <EmptyDescription>
-                Nothing matches &ldquo;{query.trim()}&rdquo;. Try a name, email, or role.
+                {needle
+                  ? `Nothing matches "${query.trim()}". Try a different search.`
+                  : "No accounts match the selected filter."}
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
@@ -625,6 +718,10 @@ export function UsersPanel({
                         roles={assignableRoles}
                         canEdit={!u.isSuperAdmin || isSuperAdmin}
                         fiscalYear={fiscalYear}
+                      />
+                      <DeleteUserButton
+                        user={u}
+                        canDelete={u.id !== currentUserId && (!u.isSuperAdmin || isSuperAdmin)}
                       />
                     </div>
                   </TableCell>

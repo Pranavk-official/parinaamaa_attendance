@@ -163,3 +163,20 @@ export async function updateUserAction(id: string, input: UpdateUserInput) {
   revalidatePath("/users");
   return { ok: true as const };
 }
+
+export async function deleteUserAction(id: string) {
+  const actor = await mustUser();
+  requirePermission(actor, "manage:users");
+
+  if (id === actor.id) return { error: "You cannot delete your own account" };
+
+  const target = await prisma.user.findUnique({ where: { id } });
+  if (!target) return { error: "User not found" };
+  if (target.isSuperAdmin && !actor.isSuperAdmin) {
+    return { error: "Only super admins can delete a super admin" };
+  }
+
+  await prismaWithAudit(actor.id).user.delete({ where: { id } });
+  revalidatePath("/users");
+  return { ok: true as const };
+}
