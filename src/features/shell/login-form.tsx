@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { Fingerprint } from "lucide-react";
+import { usePasskeySupported } from "@/hooks/use-passkey-support";
 
 import { cn } from "cn";
 import { authClient } from "@/lib/auth/auth-client";
@@ -23,6 +25,30 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, setPending] = useState(false);
+  const [passkeyPending, setPasskeyPending] = useState(false);
+  const passkeySupported = usePasskeySupported();
+
+  const continueWithPasskey = async () => {
+    if (passkeyPending) return;
+    setPasskeyPending(true);
+    const res = await authClient.signIn.passkey(
+      { autoFill: false },
+      {
+        onSuccess: () => {
+          const cb = searchParams.get("callbackUrl");
+          router.push(cb ?? "/");
+          router.refresh();
+        },
+      }
+    );
+    if (res.error) {
+      const code = "code" in res.error ? res.error.code : undefined;
+      if (code !== "AUTH_CANCELLED") {
+        toast.error(res.error.message ?? "Passkey sign-in failed");
+      }
+    }
+    setPasskeyPending(false);
+  };
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -84,6 +110,25 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               </Field>
             </FieldGroup>
           </form>
+          {passkeySupported && (
+            <div className="mt-4 flex flex-col gap-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" />
+                or
+                <span className="h-px flex-1 bg-border" />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={pending || passkeyPending}
+                onClick={continueWithPasskey}
+              >
+                {passkeyPending ? <Spinner /> : <Fingerprint />}
+                Continue with passkey
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

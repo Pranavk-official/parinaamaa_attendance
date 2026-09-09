@@ -60,6 +60,7 @@ model User {
   updatedAt     DateTime       @updatedAt
   sessions      Session[]
   accounts      Account[]
+  passkeys      Passkey[]
   attendance    Attendance[]
   leaveBalances LeaveBalance[]
   leaveRequests LeaveRequest[]
@@ -102,6 +103,24 @@ model Account {
 
   @@index([userId])
   @@map("account")
+}
+
+model Passkey {
+  id           String    @id
+  name         String?
+  publicKey    String
+  userId       String
+  credentialID String    @unique
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime? @default(now())
+  aaguid       String?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("passkey")
 }
 
 model Attendance {

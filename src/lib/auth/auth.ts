@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { bearer, jwt } from "better-auth/plugins";
+import { passkey } from "@better-auth/passkey";
 import { prisma } from "@/lib/db/prisma";
 
 export const auth = betterAuth({
@@ -44,5 +45,16 @@ export const auth = betterAuth({
       },
     },
   },
-  plugins: [bearer(), jwt()],
+  plugins: [
+    passkey({
+      rpName: "Attendance",
+      authenticatorSelection: {
+        authenticatorAttachment: "platform",
+        residentKey: "preferred",
+        userVerification: "required",
+      },
+    }),
+    bearer(),
+    jwt(),
+  ],
 });
