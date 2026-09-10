@@ -4,7 +4,7 @@ export { monthRange, periodRange } from "@/lib/domain/fiscal";
 import { periodRange, type PayrollPeriod } from "@/lib/domain/fiscal";
 import { prisma } from "@/lib/db/prisma";
 import { countDays, unpaidDeduction } from "@/lib/domain/fiscal";
-import { EMPLOYEE_WHERE, isUnpaidLeave } from "@/lib/domain/leave-policy";
+import { EMPLOYEE_WHERE, activeUserWhere, isUnpaidLeave } from "@/lib/domain/leave-policy";
 import { getPayrollDay } from "@/lib/domain/settings";
 
 export type PayrollRow = {
@@ -71,8 +71,9 @@ export async function collectPayrollRows(period?: PayrollPeriod) {
   const [users, attendances, leaveRequests] = await Promise.all([
     prisma.user.findMany({
       // Admins and super admins draw no attendance and no leave, so they are
-      // not payroll rows.
-      where: EMPLOYEE_WHERE,
+      // not payroll rows. Blocked staff are out entirely; staff relieved
+      // mid-period keep the days they worked.
+      where: { AND: [EMPLOYEE_WHERE, activeUserWhere(start)] },
       orderBy: { name: "asc" },
       select: {
         id: true,

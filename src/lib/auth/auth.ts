@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { bearer, jwt } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
@@ -28,15 +29,20 @@ export const auth = betterAuth({
   databaseHooks: {
     session: {
       create: {
-        // Employees keep a 7-day session window; admins get the 30-day default.
         before: async (session) => {
           const u = await prisma.user.findUnique({
             where: { id: session.userId as string },
             select: {
+              isBlocked: true,
               isSuperAdmin: true,
               role: { select: { permissions: true } },
             },
           });
+          // Blocked users cannot sign in at all (password or passkey).
+          if (u?.isBlocked) {
+            throw new APIError("FORBIDDEN", { message: "Account blocked. Contact your admin." });
+          }
+          // Employees keep a 7-day session window; admins get the 30-day default.
           const isExempt = !!u?.isSuperAdmin || (u?.role?.permissions.length ?? 0) > 0;
           if (!isExempt) {
             return { data: { expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } };

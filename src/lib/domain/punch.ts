@@ -74,12 +74,12 @@ export async function punchOut(userId: string) {
   // the other half becomes a leave request for a manager to action.
   const halfDay =
     !offday && attendance.punchOut !== null && leftEarly(attendance.punchOut);
-  if (halfDay) await markEarlyLeave(userId, date, fy, start);
+  if (halfDay) await markEarlyLeave(userId, date, fy, start, user.joinedDate);
 
   return { attendance, compensatoryEarned: earned, halfDay };
 }
 
-async function markEarlyLeave(userId: string, date: Date, fy: string, start: FiscalStart) {
+async function markEarlyLeave(userId: string, date: Date, fy: string, start: FiscalStart, joinedDate: Date | null) {
   // One punch-out per day already, but a hand-filed request for the same date
   // should not be doubled up either.
   const existing = await prisma.leaveRequest.findFirst({
@@ -95,7 +95,7 @@ async function markEarlyLeave(userId: string, date: Date, fy: string, start: Fis
   await prisma.leaveRequest.create({
     data: {
       userId,
-      type: resolveLeaveType("PAID", remainingDays(balance, start), requested),
+      type: resolveLeaveType("PAID", remainingDays(balance, start, joinedDate), requested),
       startDate: date,
       endDate: date,
       isHalfDay: true,

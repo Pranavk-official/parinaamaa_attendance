@@ -29,6 +29,8 @@ export type CreateUserInput = {
   password: string;
   designation: string;
   roleId: string;
+  joinedDate: string | null; // YYYY-MM-DD, null = accrual from fiscal start
+  relievingDate: string | null; // YYYY-MM-DD, null = active
   leave?: LeaveAllocation;
   pay?: SalaryInput;
 };
@@ -66,6 +68,26 @@ async function setAllocations(actorId: string, userId: string, leave: LeaveAlloc
   }
 }
 
+// YYYY-MM-DD strings only, so plain string comparison orders them correctly.
+function datesError(joinedDate: string | null, relievingDate: string | null): string | null {
+  for (const [label, v] of [
+    ["Joined date", joinedDate],
+    ["Relieving date", relievingDate],
+  ] as const) {
+    if (v !== null && Number.isNaN(new Date(`${v}T00:00:00Z`).getTime())) {
+      return `${label} must be a valid date (YYYY-MM-DD)`;
+    }
+  }
+  if (joinedDate && relievingDate && relievingDate < joinedDate) {
+    return "Relieving date cannot be before joined date";
+  }
+  return null;
+}
+
+function dateOrNull(v: string | null) {
+  return v ? new Date(`${v}T00:00:00Z`) : null;
+}
+
 function assertAssignableRole(actor: { isSuperAdmin: boolean }, role: { name: string }) {
   if (role.name === "Super Admin" && !actor.isSuperAdmin) {
     return "Only super admins can assign the Super Admin role";
@@ -83,6 +105,8 @@ export async function createUserAction(input: CreateUserInput) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Invalid email" };
   if (input.password.length < 8) return { error: "Password must be at least 8 characters" };
   if (!input.designation.trim()) return { error: "Designation is required" };
+  const datesProblem = datesError(input.joinedDate, input.relievingDate);
+  if (datesProblem) return { error: datesProblem };
   const allocationProblem = input.leave && allocationError(input.leave);
   if (allocationProblem) return { error: allocationProblem };
   const payProblem = input.pay && salaryError(input.pay);
@@ -107,6 +131,8 @@ export async function createUserAction(input: CreateUserInput) {
     data: {
       roleId: role.id,
       designation: input.designation.trim(),
+      joinedDate: dateOrNull(input.joinedDate),
+      relievingDate: dateOrNull(input.relievingDate),
       ...(input.pay ? { salary: input.pay.salary, salaryBasis: input.pay.salaryBasis } : {}),
     },
   });
@@ -131,6 +157,8 @@ export type UpdateUserInput = {
   name: string;
   designation: string;
   roleId: string;
+  joinedDate: string | null;
+  relievingDate: string | null;
   leave?: LeaveAllocation;
   pay?: SalaryInput;
 };
@@ -141,6 +169,8 @@ export async function updateUserAction(id: string, input: UpdateUserInput) {
 
   const name = input.name.trim();
   if (!name) return { error: "Name is required" };
+  const datesProblem = datesError(input.joinedDate, input.relievingDate);
+  if (datesProblem) return { error: datesProblem };
   const allocationProblem = input.leave && allocationError(input.leave);
   if (allocationProblem) return { error: allocationProblem };
   const payProblem = input.pay && salaryError(input.pay);
@@ -163,6 +193,8 @@ export async function updateUserAction(id: string, input: UpdateUserInput) {
       name,
       roleId: role.id,
       designation: input.designation.trim() || null,
+      joinedDate: dateOrNull(input.joinedDate),
+      relievingDate: dateOrNull(input.relievingDate),
       ...(input.pay ? { salary: input.pay.salary, salaryBasis: input.pay.salaryBasis } : {}),
     },
   });
@@ -200,6 +232,23 @@ export async function deleteUserAction(id: string) {
   }
 
   await prismaWithAudit(actor.id).user.delete({ where: { id } });
+  revalidatePath("/users");
+  return { ok: true as const };
+}
+
+export async function setBlockedAction(id: string, blocked: boolean) {
+  const actor = await mustUser();
+  requirePermission(actor, "manage:users");
+
+  if (id === actor.id) return { error: "You cannot block your own account" };
+  const target = await prisma.user.findUnique({ where: { id } });
+  if (!target) return { error: "User not found" };
+  if (target.isSuperAdmin && !actor.isSuperAdmin) {
+    return { error: "Only super admins can block a super admin" };
+  }
+
+  await prismaWithAudit(actor.id).user.update({ where: { id }, data: { isBlocked: blocked } });
+  if (blocked) await prisma.session.deleteMany({ where: { userId: id } });
   revalidatePath("/users");
   return { ok: true as const };
 }
@@ -249,6 +298,8 @@ export async function upsertUserAction(input: CreateUserInput) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Invalid email" };
   if (input.password.length < 8) return { error: "Password must be at least 8 characters" };
   if (!input.designation.trim()) return { error: "Designation is required" };
+  const datesProblem = datesError(input.joinedDate, input.relievingDate);
+  if (datesProblem) return { error: datesProblem };
   const allocationProblem = input.leave && allocationError(input.leave);
   if (allocationProblem) return { error: allocationProblem };
   const payProblem = input.pay && salaryError(input.pay);
@@ -276,6 +327,8 @@ export async function upsertUserAction(input: CreateUserInput) {
       name,
       roleId: role.id,
       designation: input.designation.trim(),
+      joinedDate: dateOrNull(input.joinedDate),
+      relievingDate: dateOrNull(input.relievingDate),
       ...(input.pay ? { salary: input.pay.salary, salaryBasis: input.pay.salaryBasis } : {}),
     },
   });

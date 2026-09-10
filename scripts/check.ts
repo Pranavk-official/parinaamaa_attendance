@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   fiscalYear,
   countDays,
+  monthsAccrued,
   monthsElapsedInFiscalYear,
   remainingDays,
   unpaidDeduction,
@@ -16,6 +17,7 @@ import {
   rejectMailBody,
   rejectMailSubject,
 } from "../src/lib/domain/leave-mail";
+import { activeUserWhere } from "../src/lib/domain/leave-policy";
 
 // April 1 2026 rallies to 2026-2027
 assert.equal(fiscalYear(new Date(2026, 3, 1)), "2026-2027");
@@ -101,6 +103,8 @@ for (const column of [
   "salaryBasis",
   "paidPerMonth",
   "compensatory",
+  "joinedDate",
+  "relievingDate",
 ]) {
   assert.ok(templateHeader.includes(column), `template is missing ${column}`);
 }
@@ -131,5 +135,25 @@ assert.equal(range.endExclusive.toISOString(), "2026-03-07T00:00:00.000Z");
 assert.equal(range.label, "2026-02-07-2026-03-06");
 // A garbled range falls back to the default month.
 assert.equal(periodRange(2, { from: "nope", to: "2026-03-06" }).label, def.label);
+
+// Accrual pro-rate: blank joinedDate means the full fiscal year so far.
+// Joined 2026-09-09, today 2026-09-10: September counts once its day arrives.
+const sep10 = new Date(2026, 8, 10);
+assert.equal(monthsAccrued(sep10, { month: 3, day: 1 }, null), 6);
+assert.equal(monthsAccrued(sep10, { month: 3, day: 1 }, new Date(2026, 8, 9)), 1);
+assert.equal(monthsAccrued(sep10, { month: 3, day: 1 }, new Date(2026, 8, 10)), 1);
+assert.equal(monthsAccrued(sep10, { month: 3, day: 1 }, new Date(2026, 8, 11)), 0);
+assert.equal(monthsAccrued(sep10, { month: 3, day: 1 }, new Date(2026, 3, 1)), 6);
+assert.equal(
+  remainingDays({ allocated: 0, perMonth: 2, used: 0 }, { month: 3, day: 1 }, new Date(2026, 8, 9), sep10),
+  2
+);
+
+// Inactive staff drop out of dashboards, queues and payroll: blocked always,
+// relieved before the reference day. The relieving day itself still counts.
+assert.deepEqual(activeUserWhere(new Date(2026, 8, 10)), {
+  isBlocked: false,
+  OR: [{ relievingDate: null }, { relievingDate: { gte: new Date(Date.UTC(2026, 8, 10)) } }],
+});
 
 console.log("fiscal checks passed");

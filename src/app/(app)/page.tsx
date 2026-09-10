@@ -39,12 +39,13 @@ import { mustUser, type CurrentUser } from "@/lib/auth/auth-user";
 import {
   ALLOCATABLE_LEAVE_TYPES,
   EMPLOYEE_WHERE,
+  activeUserWhere,
   isLeaveExempt,
   isUnpaidLeave,
 } from "@/lib/domain/leave-policy";
 import { prisma } from "@/lib/db/prisma";
 import { getFiscalStart } from "@/lib/domain/settings";
-import { fiscalYear, monthsElapsedInFiscalYear, toDateOnly, countDays } from "@/lib/domain/fiscal";
+import { fiscalYear, remainingDays, toDateOnly, countDays } from "@/lib/domain/fiscal";
 
 function iso(d: Date) {
   return toDateOnly(d).toISOString().slice(0, 10);
@@ -122,6 +123,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
   const start = await getFiscalStart();
   const fy = fiscalYear(new Date(), start);
   const today = toDateOnly(new Date());
+  const active = activeUserWhere(today);
 
   const [
     employeeCount,
@@ -131,26 +133,26 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
     approvedThisYear,
     onLeaveToday,
   ] = await Promise.all([
-      prisma.user.count({ where: EMPLOYEE_WHERE }),
+      prisma.user.count({ where: { AND: [EMPLOYEE_WHERE, active] } }),
       prisma.attendance.findMany({
-        where: { date: today },
+        where: { date: today, user: active },
         include: { user: { select: { name: true, designation: true } } },
         orderBy: { punchIn: "asc" },
       }),
       prisma.leaveRequest.findMany({
-        where: { status: "PENDING" },
+        where: { status: "PENDING", user: active },
         include: { user: { select: { name: true } } },
         orderBy: { createdAt: "asc" },
         take: 8,
       }),
       // The list above is capped for display; the stat card needs the real total.
-      prisma.leaveRequest.count({ where: { status: "PENDING" } }),
+      prisma.leaveRequest.count({ where: { status: "PENDING", user: active } }),
       prisma.leaveRequest.findMany({
-        where: { status: "APPROVED" },
+        where: { status: "APPROVED", user: active },
         select: { type: true, startDate: true, endDate: true, isHalfDay: true },
       }),
       prisma.leaveRequest.count({
-        where: { status: "APPROVED", startDate: { lte: today }, endDate: { gte: today } },
+        where: { status: "APPROVED", startDate: { lte: today }, endDate: { gte: today }, user: active },
       }),
     ]);
 
@@ -421,9 +423,8 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
           </CardContent>
         </Card>
         {balanceCards.map((b) => {
-          const entitled =
-            b.perMonth > 0 ? b.perMonth * monthsElapsedInFiscalYear(new Date(), start) : b.allocated;
-          const remaining = entitled - b.used;
+          const remaining = remainingDays(b, start, user.joinedDate);
+          const entitled = remaining + b.used;
           const pct = entitled > 0 ? Math.min(100, Math.max(0, (remaining / entitled) * 100)) : 0;
           return (
             <Card key={b.leaveType}>

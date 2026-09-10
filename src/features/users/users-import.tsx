@@ -34,8 +34,8 @@ type RoleRow = { id: string; name: string };
 
 // One header row plus a filled example, so the shape is obvious in a spreadsheet.
 const TEMPLATE = [
-  "name,email,password,designation,role,salary,salaryBasis,paidPerMonth,compensatory",
-  "Asha Nair,asha@company.local,changeme123,Software Engineer,Employee,85000,monthly,1,0",
+  "name,email,password,designation,role,salary,salaryBasis,paidPerMonth,compensatory,joinedDate,relievingDate",
+  "Asha Nair,asha@company.local,changeme123,Software Engineer,Employee,85000,monthly,1,0,2026-09-09,",
 ].join("\n");
 
 function downloadTemplate(format: "csv" | "xlsx") {
@@ -67,6 +67,8 @@ type ParsedRow = {
   compensatory: number;
   salary: number | null;
   annualSalary: boolean;
+  joinedDate: string | null; // YYYY-MM-DD
+  relievingDate: string | null; // YYYY-MM-DD
 };
 
 // Headers may be CAPITAL, Title Case, camelCase, or PascalCase.
@@ -76,6 +78,22 @@ function num(v: unknown, fallback: number): number | null {
   if (!raw) return fallback;
   const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+// Excel date cells arrive as formatted text (raw:false); Date objects survive
+// too. Normalises to YYYY-MM-DD, or null when blank.
+function dateCell(v: unknown): string | null | undefined {
+  if (v === null || v === undefined) return null;
+  if (v instanceof Date) {
+    return Number.isNaN(v.getTime()) ? undefined : v.toISOString().slice(0, 10);
+  }
+  const raw = String(v).trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return Number.isNaN(new Date(`${raw}T00:00:00Z`).getTime()) ? undefined : raw;
+  }
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString().slice(0, 10);
 }
 
 export function UsersImport({ roles }: { roles: RoleRow[] }) {
@@ -144,6 +162,20 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
           errs.push(`Row ${i + 2}: salary must be a non-negative number`);
           return;
         }
+        const joinedDate = dateCell(r.joineddate);
+        const relievingDate = dateCell(r.relievingdate);
+        if (joinedDate === undefined) {
+          errs.push(`Row ${i + 2}: joinedDate must be a valid date (YYYY-MM-DD)`);
+          return;
+        }
+        if (relievingDate === undefined) {
+          errs.push(`Row ${i + 2}: relievingDate must be a valid date (YYYY-MM-DD)`);
+          return;
+        }
+        if (joinedDate && relievingDate && relievingDate < joinedDate) {
+          errs.push(`Row ${i + 2}: relievingDate cannot be before joinedDate`);
+          return;
+        }
         parsed.push({
           name,
           email,
@@ -154,13 +186,15 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
           compensatory,
           salary,
           annualSalary,
+          joinedDate,
+          relievingDate,
         });
       });
       setRows(parsed);
       setErrors(errs);
     } catch {
       setErrors([
-        "Could not read file. Use .csv or .xlsx with columns: name, email, password, designation, role, salary, salaryBasis, paidPerMonth, compensatory.",
+        "Could not read file. Use .csv or .xlsx with columns: name, email, password, designation, role, salary, salaryBasis, paidPerMonth, compensatory, joinedDate, relievingDate.",
       ]);
     }
   };
@@ -178,6 +212,8 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
           password: r.password,
           designation: r.designation,
           roleId: roleById.get(r.role)!,
+          joinedDate: r.joinedDate,
+          relievingDate: r.relievingDate,
           leave: { paidPerMonth: r.paidPerMonth, compensatoryAllocated: r.compensatory },
           pay: { salary: r.salary, salaryBasis: r.annualSalary ? "ANNUAL" : "MONTHLY" },
         });
@@ -224,7 +260,8 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
           Upload a .csv or .xlsx file. Columns: name, email, password, designation,
           role (defaults to Employee), salary, salaryBasis (annual or monthly,
           defaults to monthly), paidPerMonth (defaults to 1), compensatory (defaults
-          to 0). Header casing does not matter. New emails are created; existing
+          to 0), joinedDate (YYYY-MM-DD, blank = accrual from fiscal start),
+          relievingDate (YYYY-MM-DD, blank = active). Header casing does not matter. New emails are created; existing
           emails are updated with the sheet&apos;s values, including the password
           (which signs that user out). Regular leave is unpaid and uncapped, so it is never allocated.
         </Description>

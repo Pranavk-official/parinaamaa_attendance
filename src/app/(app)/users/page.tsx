@@ -32,10 +32,13 @@ export default async function UsersPage() {
   ]);
 
   // Prisma Decimal does not cross the server/client boundary, so send a number.
+  // Dates go over as YYYY-MM-DD strings for the date inputs.
   const userRows = users.map((u) => ({
     ...u,
     salary: u.salary === null ? null : Number(u.salary),
     annualSalary: u.salaryBasis === "ANNUAL",
+    joinedDate: u.joinedDate ? u.joinedDate.toISOString().slice(0, 10) : null,
+    relievingDate: u.relievingDate ? u.relievingDate.toISOString().slice(0, 10) : null,
     salaryHistory: u.salaryHistory.map((h) => ({
       ...h,
       salary: h.salary === null ? null : Number(h.salary),

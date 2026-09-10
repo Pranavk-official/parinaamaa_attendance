@@ -9,6 +9,9 @@ export interface CurrentUser {
   email: string;
   isSuperAdmin: boolean;
   designation: string | null;
+  joinedDate: Date | null;
+  relievingDate: Date | null;
+  isBlocked: boolean;
   role: { name: string; permissions: string[] } | null;
 }
 
@@ -29,6 +32,9 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     email: prismaUser.email,
     isSuperAdmin: prismaUser.isSuperAdmin,
     designation: prismaUser.designation,
+    joinedDate: prismaUser.joinedDate,
+    relievingDate: prismaUser.relievingDate,
+    isBlocked: prismaUser.isBlocked,
     role: prismaUser.role
       ? { name: prismaUser.role.name, permissions: prismaUser.role.permissions }
       : null,

@@ -5,18 +5,10 @@ import { useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   CalendarCheck,
-  CalendarPlus,
   ChevronsUpDown,
   Ellipsis,
-  FileSpreadsheet,
-  FileText,
   Fingerprint,
-  Inbox,
-  LayoutDashboard,
   LogOut,
-  Settings2,
-  Shield,
-  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth/auth-client";
@@ -60,6 +52,11 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { ThemeSwitcher } from "@/features/shell/theme-switcher";
+import {
+  BOTTOM_NAV_SLOTS,
+  getNavGroups,
+  type NavItem,
+} from "@/features/shell/nav-items";
 import { usePasskeySupported } from "@/hooks/use-passkey-support";
 import {
   Sidebar,
@@ -78,20 +75,6 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-
-/** Bottom nav shows this many items; the rest live behind "More". */
-const BOTTOM_NAV_SLOTS = 4;
-
-type NavItem = {
-  label: string;
-  href: string;
-  /** Bottom-nav caption. A tab is ~1/5 of a phone's width, so long labels
-      truncate there; give anything over ~7 characters a short form. */
-  short?: string;
-  icon: typeof LayoutDashboard;
-};
-
-type NavGroup = { label: string; items: NavItem[] };
 
 function initials(name: string) {
   return name
@@ -287,9 +270,20 @@ function MoreSheet({
   const close = () => onOpenChange(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const { pending, signOut, signOutAfterPunch } = useSignOut();
+  const passkeySupported = usePasskeySupported();
   const closeAll = () => {
     setSignOutOpen(false);
     close();
+  };
+
+  // Registration needs a signed-in session — same call as the desktop menu.
+  const addPasskey = async () => {
+    const res = await authClient.passkey.addPasskey();
+    if (res?.error) toast.error(res.error.message ?? "Could not set up passkey");
+    else {
+      toast.success("Passkey added — use it on your next sign-in");
+      close();
+    }
   };
 
   return (
@@ -327,6 +321,16 @@ function MoreSheet({
               </Button>
             );
           })}
+          {passkeySupported && (
+            <Button
+              variant="ghost"
+              className="h-11 justify-center gap-3 rounded-none px-3 text-sm font-normal"
+              onClick={addPasskey}
+            >
+              <Fingerprint className="size-5" />
+              Set up passkey
+            </Button>
+          )}
           <Button
             variant="ghost"
             className="h-11 justify-center gap-3 rounded-none px-3 text-sm font-normal"
@@ -461,52 +465,7 @@ export function Nav({
   const [moreOpen, setMoreOpen] = useState(false);
 
   // Grouped for the sidebar; BottomNav flattens them back into tabs.
-  const groups: NavGroup[] = [
-    {
-      label: "Home",
-      items: [
-        { href: "/", label: "Dashboard", short: "Home", icon: LayoutDashboard },
-        ...(isEmployee
-          ? [{ href: "/leaves/new", label: "Apply Leave", short: "Apply", icon: CalendarPlus }]
-          : []),
-        {
-          href: "/leaves",
-          label: isEmployee ? "My Leave" : "Leave Queue",
-          short: "Leave",
-          icon: Inbox,
-        },
-      ],
-    },
-    ...(canManageUsers || canViewReports
-      ? [
-          {
-            label: "Manage",
-            items: [
-              ...(canManageUsers ? [{ href: "/users", label: "Users", icon: Users }] : []),
-              ...(canViewReports
-                ? [
-                    { href: "/reports", label: "Reports", icon: FileSpreadsheet },
-                    { href: "/audit", label: "Audit Log", short: "Audit", icon: FileText },
-                  ]
-                : []),
-            ],
-          },
-        ]
-      : []),
-    ...(isEmployee
-      ? []
-      : [
-          {
-            label: "Settings",
-            items: [
-              ...(canManageUsers
-                ? [{ href: "/settings", label: "Payroll", icon: Settings2 }]
-                : []),
-              { href: "/security", label: "Security", icon: Shield },
-            ],
-          },
-        ]),
-  ];
+  const groups = getNavGroups({ isEmployee, canManageUsers, canViewReports });
   const items: NavItem[] = groups.flatMap((g) => g.items);
   const current = items.find((i) => i.href === pathname);
   // Four tabs and a "More"; whatever does not fit joins the account, theme and

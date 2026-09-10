@@ -100,15 +100,37 @@ export function periodRange(day: number, period?: PayrollPeriod) {
   return monthRange(day, month);
 }
 
+// Months accrued for a perMonth balance. Blank joinedDate means the full
+// fiscal year so far; a set one caps accrual at whole months since joining
+// (join month counts once its day is reached).
+export function monthsAccrued(
+  date: Date = new Date(),
+  start: FiscalStart = DEFAULT_FISCAL_START,
+  joinedDate?: Date | string | null
+): number {
+  const elapsed = monthsElapsedInFiscalYear(date, start);
+  if (!joinedDate) return elapsed;
+  const j = new Date(joinedDate);
+  if (Number.isNaN(j.getTime())) return elapsed;
+  const n =
+    (date.getFullYear() - j.getFullYear()) * 12 +
+    (date.getMonth() - j.getMonth()) +
+    (date.getDate() >= j.getDate() ? 1 : 0);
+  return Math.max(0, Math.min(elapsed, n));
+}
+
 // Days still available on a balance. A perMonth balance accrues through the
-// fiscal year; anything else is an annual lump.
+// fiscal year (pro-rated from joinedDate when set); anything else is an
+// annual lump.
 export function remainingDays(
   b: { allocated: number; perMonth: number; used: number } | null | undefined,
-  start: FiscalStart = DEFAULT_FISCAL_START
+  start: FiscalStart = DEFAULT_FISCAL_START,
+  joinedDate?: Date | string | null,
+  now: Date = new Date()
 ): number {
   if (!b) return 0;
   return b.perMonth > 0
-    ? b.perMonth * monthsElapsedInFiscalYear(new Date(), start) - b.used
+    ? b.perMonth * monthsAccrued(now, start, joinedDate) - b.used
     : b.allocated - b.used;
 }
 

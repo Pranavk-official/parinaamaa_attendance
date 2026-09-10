@@ -3,7 +3,7 @@ import { CalendarPlus, Inbox } from "lucide-react";
 import { mustUser, hasPermission } from "@/lib/auth/auth-user";
 import { prisma } from "@/lib/db/prisma";
 import { countDays } from "@/lib/domain/fiscal";
-import { isLeaveExempt } from "@/lib/domain/leave-policy";
+import { activeUserWhere, isLeaveExempt } from "@/lib/domain/leave-policy";
 import type { HalfDaySession } from "@/generated/prisma/client";
 import {
   Table,
@@ -123,9 +123,10 @@ export default async function LeavesPage() {
   const canManage = hasPermission(user, "manage:leaves");
   const exempt = isLeaveExempt(user);
 
-  // Employees see only their own requests; admins see the whole team queue.
+  // Employees see only their own requests; admins see the whole team queue
+  // minus blocked and relieved staff.
   const requests = await prisma.leaveRequest.findMany({
-    where: exempt ? {} : { userId: user.id },
+    where: exempt ? { user: activeUserWhere(new Date()) } : { userId: user.id },
     include: { user: { select: { name: true, email: true } } },
     // PENDING sorts first in the enum, so what needs a decision is at the top
     // of the list — on a phone the rest is below the fold either way.

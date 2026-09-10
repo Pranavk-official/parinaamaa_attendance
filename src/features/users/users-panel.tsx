@@ -74,7 +74,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { createUserAction, updateUserAction, deleteUserAction, resetUserPasswordAction } from "@/lib/server/actions/users";
+import { createUserAction, updateUserAction, deleteUserAction, resetUserPasswordAction, setBlockedAction } from "@/lib/server/actions/users";
 import { UsersImport } from "@/features/users/users-import";
 import { isLeaveExempt } from "@/lib/domain/leave-policy";
 import type { LeaveType, SalaryBasis } from "@/generated/prisma/client";
@@ -91,6 +91,9 @@ type UserRow = {
   email: string;
   designation: string | null;
   isSuperAdmin: boolean;
+  isBlocked: boolean;
+  joinedDate: string | null;
+  relievingDate: string | null;
   role: { id: string; name: string; permissions: string[] } | null;
   salary: number | null;
   annualSalary: boolean;
@@ -218,9 +221,10 @@ function CreateUserDialog({
   const [compensatory, setCompensatory] = useState("0");
   const [salary, setSalary] = useState("");
   const [annual, setAnnual] = useState(false);
+  const [joinedDate, setJoinedDate] = useState("");
+  const [relievingDate, setRelievingDate] = useState("");
   // Staff roles carry permissions; they are leave-exempt and get no allocation.
   const exempt = (roles.find((r) => r.id === roleId)?.permissions.length ?? 0) > 0;
-
   const reset = () => {
     setName("");
     setEmail("");
@@ -231,6 +235,8 @@ function CreateUserDialog({
     setCompensatory("0");
     setSalary("");
     setAnnual(false);
+    setJoinedDate("");
+    setRelievingDate("");
   };
 
   const submit = () => {
@@ -241,6 +247,8 @@ function CreateUserDialog({
         password,
         designation,
         roleId,
+        joinedDate: joinedDate || null,
+        relievingDate: relievingDate || null,
         leave: {
           paidPerMonth: Number(paidPerMonth),
           compensatoryAllocated: Number(compensatory),
@@ -315,6 +323,28 @@ function CreateUserDialog({
             />
           </Field>
           <Field>
+            <FieldLabel htmlFor="nu-joined">Joined date</FieldLabel>
+            <Input
+              id="nu-joined"
+              type="date"
+              value={joinedDate}
+              onChange={(e) => setJoinedDate(e.target.value)}
+            />
+            <FieldDescription>
+              Blank means leave accrues from the fiscal start; a set date pro-rates it.
+            </FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="nu-relieving">Relieving date</FieldLabel>
+            <Input
+              id="nu-relieving"
+              type="date"
+              value={relievingDate}
+              min={joinedDate || undefined}
+              onChange={(e) => setRelievingDate(e.target.value)}
+            />
+          </Field>
+          <Field>
             <FieldLabel>Role</FieldLabel>
             <Select
               value={roleId}
@@ -385,11 +415,13 @@ function EditUserDialog({
   user,
   roles,
   canEdit,
+  canBlock,
   fiscalYear,
 }: {
   user: UserRow;
   roles: RoleRow[];
   canEdit: boolean;
+  canBlock: boolean;
   fiscalYear: string;
 }) {
   const router = useRouter();
@@ -410,6 +442,8 @@ function EditUserDialog({
   const [salary, setSalary] = useState(user.salary === null ? "" : String(user.salary));
   const [annual, setAnnual] = useState(user.annualSalary);
   const [newPassword, setNewPassword] = useState("");
+  const [joinedDate, setJoinedDate] = useState(user.joinedDate ?? "");
+  const [relievingDate, setRelievingDate] = useState(user.relievingDate ?? "");
 
   const submit = () => {
     startTransition(async () => {
@@ -417,6 +451,8 @@ function EditUserDialog({
         name,
         designation,
         roleId,
+        joinedDate: joinedDate || null,
+        relievingDate: relievingDate || null,
         leave: {
           paidPerMonth: Number(paidPerMonth),
           compensatoryAllocated: Number(compensatory),
@@ -446,6 +482,18 @@ function EditUserDialog({
       }
       toast.success(`Password set for ${user.name}`);
       setNewPassword("");
+    });
+  };
+
+  const toggleBlock = () => {
+    startTransition(async () => {
+      const res = await setBlockedAction(user.id, !user.isBlocked);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(user.isBlocked ? `${user.name} unblocked` : `${user.name} blocked`);
+      router.refresh();
     });
   };
 
@@ -482,6 +530,28 @@ function EditUserDialog({
                 id="eu-designation"
                 value={designation}
                 onChange={(e) => setDesignation(e.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="eu-joined">Joined date</FieldLabel>
+              <Input
+                id="eu-joined"
+                type="date"
+                value={joinedDate}
+                onChange={(e) => setJoinedDate(e.target.value)}
+              />
+              <FieldDescription>
+                Blank means leave accrues from the fiscal start; a set date pro-rates it.
+              </FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="eu-relieving">Relieving date</FieldLabel>
+              <Input
+                id="eu-relieving"
+                type="date"
+                value={relievingDate}
+                min={joinedDate || undefined}
+                onChange={(e) => setRelievingDate(e.target.value)}
               />
             </Field>
             <Field>
@@ -554,6 +624,30 @@ function EditUserDialog({
               set by another super admin.
             </FieldDescription>
           </Field>
+          {canBlock && (
+            <Field>
+              <FieldLabel>Access</FieldLabel>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant={user.isBlocked ? "default" : "destructive"}
+                  disabled={pending}
+                  onClick={toggleBlock}
+                >
+                  {pending && <Spinner />}
+                  {user.isBlocked ? "Unblock" : "Block"}
+                </Button>
+                {user.isBlocked && (
+                  <span className="text-sm text-muted-foreground">
+                    Blocked — cannot sign in.
+                  </span>
+                )}
+              </div>
+              <FieldDescription>
+                Blocking signs {user.name} out and stops future sign-ins.
+              </FieldDescription>
+            </Field>
+          )}
         </FieldGroup>
       </div>
       <Footer>
@@ -821,9 +915,13 @@ export function UsersPanel({
                     {u.designation ?? "—"}
                   </TableCell>
                   <TableCell data-label="Role">
-                    <Badge variant={u.isSuperAdmin ? "default" : "secondary"}>
-                      {u.role?.name ?? (u.isSuperAdmin ? "Super Admin" : "—")}
-                    </Badge>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge variant={u.isSuperAdmin ? "default" : "secondary"}>
+                        {u.role?.name ?? (u.isSuperAdmin ? "Super Admin" : "—")}
+                      </Badge>
+                      {u.relievingDate && <Badge variant="outline">Exited</Badge>}
+                      {u.isBlocked && <Badge variant="destructive">Blocked</Badge>}
+                    </div>
                   </TableCell>
                   <TableCell
                     data-label="Salary"
@@ -861,6 +959,7 @@ export function UsersPanel({
                         user={u}
                         roles={assignableRoles}
                         canEdit={!u.isSuperAdmin || isSuperAdmin}
+                        canBlock={u.id !== currentUserId && (!u.isSuperAdmin || isSuperAdmin)}
                         fiscalYear={fiscalYear}
                       />
                       <DeleteUserButton

@@ -75,7 +75,7 @@ export async function submitLeaveAction(input: LeaveFormInput) {
             userId_fiscalYear_leaveType: { userId: user.id, fiscalYear: fy, leaveType: "PAID" },
           },
         });
-  const type = resolveLeaveType(input.type, remainingDays(paidBalance, fyStart), requested);
+  const type = resolveLeaveType(input.type, remainingDays(paidBalance, fyStart, user.joinedDate), requested);
 
   await prisma.leaveRequest.create({
     data: {
@@ -148,7 +148,7 @@ export async function approveLeaveAction(id: string) {
               },
             },
           });
-    const type = resolveLeaveType(request.type, remainingDays(paidBalance, start), requested);
+    const type = resolveLeaveType(request.type, remainingDays(paidBalance, start, request.user.joinedDate), requested);
 
     await tx.leaveBalance.upsert({
       where: {

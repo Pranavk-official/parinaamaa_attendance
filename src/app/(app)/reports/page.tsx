@@ -84,7 +84,8 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
           <CardTitle>{label}</CardTitle>
           <CardDescription>
             {rows.length} employee{rows.length === 1 ? "" : "s"}. Admins are excluded —
-            they record no attendance and draw no leave.
+            they record no attendance and draw no leave, as are blocked and
+            relieved staff.
           </CardDescription>
         </CardHeader>
         <CardContent>

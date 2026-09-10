@@ -9,6 +9,17 @@ export const EMPLOYEE_WHERE: Prisma.UserWhereInput = {
   OR: [{ roleId: null }, { role: { permissions: { isEmpty: true } } }],
 };
 
+// Active staff for dashboards, queues and payroll: never blocked, and not
+// relieved before `ref` (relieving day itself still counts as active).
+// Pass a payroll period's start so mid-period exits keep their worked days.
+export function activeUserWhere(ref: Date = new Date()): Prisma.UserWhereInput {
+  const day = new Date(Date.UTC(ref.getFullYear(), ref.getMonth(), ref.getDate()));
+  return {
+    isBlocked: false,
+    OR: [{ relievingDate: null }, { relievingDate: { gte: day } }],
+  };
+}
+
 export type LeaveExemptSubject = {
   isSuperAdmin: boolean;
   role: { permissions: string[] } | null;
