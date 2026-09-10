@@ -28,7 +28,7 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { createUserAction } from "@/lib/server/actions/users";
+import { upsertUserAction } from "@/lib/server/actions/users";
 
 type RoleRow = { id: string; name: string };
 
@@ -169,9 +169,10 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
     if (!rows) return;
     startTransition(async () => {
       let ok = 0;
+      let created = 0;
       const errs: string[] = [];
       for (const r of rows) {
-        const res = await createUserAction({
+        const res = await upsertUserAction({
           name: r.name,
           email: r.email,
           password: r.password,
@@ -180,11 +181,14 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
           leave: { paidPerMonth: r.paidPerMonth, compensatoryAllocated: r.compensatory },
           pay: { salary: r.salary, salaryBasis: r.annualSalary ? "ANNUAL" : "MONTHLY" },
         });
-        if (res.error) errs.push(`${r.email}: ${res.error}`);
-        else ok++;
+        if ("error" in res) errs.push(`${r.email}: ${res.error}`);
+        else {
+          ok++;
+          if ("created" in res && res.created) created++;
+        }
       }
       if (errs.length) setErrors(errs);
-      toast.success(`Imported ${ok} of ${rows.length} users`);
+      toast.success(`Imported ${ok} of ${rows.length} users (${created} new, ${ok - created} updated)`);
       setRows(null);
       if (inputRef.current) inputRef.current.value = "";
       router.refresh();
@@ -220,7 +224,9 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
           Upload a .csv or .xlsx file. Columns: name, email, password, designation,
           role (defaults to Employee), salary, salaryBasis (annual or monthly,
           defaults to monthly), paidPerMonth (defaults to 1), compensatory (defaults
-          to 0). Header casing does not matter. Regular leave is unpaid and uncapped, so it is never allocated.
+          to 0). Header casing does not matter. New emails are created; existing
+          emails are updated with the sheet&apos;s values, including the password
+          (which signs that user out). Regular leave is unpaid and uncapped, so it is never allocated.
         </Description>
       </Header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">

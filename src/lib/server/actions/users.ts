@@ -218,13 +218,80 @@ export async function resetUserPasswordAction(id: string, password: string) {
     return { error: "Only super admins can reset a super admin" };
   }
 
+  const count = await setCredentialPassword(actor.id, id, password);
+  if (count === 0) return { error: "No password account found for this user" };
+  return { ok: true as const };
+}
+
+// Shared credential-password writer. Returns the number of credential accounts
+// updated; always signs the user out everywhere.
+async function setCredentialPassword(actorId: string, userId: string, password: string) {
   const { hashPassword } = await import("better-auth/crypto");
   const hashed = await hashPassword(password);
-  const updated = await prismaWithAudit(actor.id).account.updateMany({
-    where: { userId: id, providerId: "credential" },
+  const updated = await prismaWithAudit(actorId).account.updateMany({
+    where: { userId, providerId: "credential" },
     data: { password: hashed },
   });
-  if (updated.count === 0) return { error: "No password account found for this user" };
-  await prisma.session.deleteMany({ where: { userId: id } });
-  return { ok: true as const };
+  await prisma.session.deleteMany({ where: { userId } });
+  return updated.count;
+}
+
+// Bulk import entry point: creates the account, or updates every column from
+// the sheet when the email already exists — including the password, which
+// signs that user out everywhere.
+export async function upsertUserAction(input: CreateUserInput) {
+  const actor = await mustUser();
+  requirePermission(actor, "manage:users");
+
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  if (!name) return { error: "Name is required" };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Invalid email" };
+  if (input.password.length < 8) return { error: "Password must be at least 8 characters" };
+  if (!input.designation.trim()) return { error: "Designation is required" };
+  const allocationProblem = input.leave && allocationError(input.leave);
+  if (allocationProblem) return { error: allocationProblem };
+  const payProblem = input.pay && salaryError(input.pay);
+  if (payProblem) return { error: payProblem };
+
+  const role = await prisma.role.findUnique({ where: { id: input.roleId } });
+  if (!role) return { error: "Invalid role" };
+  const roleError = assertAssignableRole(actor, role);
+  if (roleError) return { error: roleError };
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (!existing) {
+    const res = await createUserAction(input);
+    if ("error" in res) return res;
+    return { ok: true as const, id: res.id, created: true as const };
+  }
+  if (existing.isSuperAdmin && !actor.isSuperAdmin) {
+    return { error: "Only super admins can edit a super admin" };
+  }
+
+  const db = prismaWithAudit(actor.id);
+  await db.user.update({
+    where: { id: existing.id },
+    data: {
+      name,
+      roleId: role.id,
+      designation: input.designation.trim(),
+      ...(input.pay ? { salary: input.pay.salary, salaryBasis: input.pay.salaryBasis } : {}),
+    },
+  });
+  if (input.pay) {
+    const oldSalary = existing.salary === null ? null : Number(existing.salary);
+    if (oldSalary !== input.pay.salary || existing.salaryBasis !== input.pay.salaryBasis) {
+      await db.salaryHistory.create({
+        data: { userId: existing.id, salary: input.pay.salary, basis: input.pay.salaryBasis },
+      });
+    }
+  }
+  if (input.leave && !isLeaveExempt({ isSuperAdmin: existing.isSuperAdmin, role })) {
+    await setAllocations(actor.id, existing.id, input.leave);
+  }
+  await setCredentialPassword(actor.id, existing.id, input.password);
+
+  revalidatePath("/users");
+  return { ok: true as const, id: existing.id, created: false as const };
 }
