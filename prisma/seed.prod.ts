@@ -2,6 +2,7 @@
 // every container start but only does work on an empty database — see the guard
 // below. Use prisma/seed.ts for local dummy data.
 import { ensureUser, prisma, run, upsertRoles, type SeedUser } from "./seed-common";
+import { seedHistory } from "./seed-history";
 
 // The password is the email address for the first sign-in. Both accounts are
 // leave-exempt (Super Admin, and Admin carries permissions), so neither gets a
@@ -25,6 +26,9 @@ const USERS: SeedUser[] = [
 ];
 
 run(async () => {
+  // History first: no-op after its own once-ever marker is set.
+  await seedHistory();
+
   // Seed once, on first boot only. ensureUser() skips creating an account that
   // already exists, but it still rewrites roleId/designation/isSuperAdmin/salary,
   // and upsertRoles() rewrites permissions — so re-running would revert whatever
