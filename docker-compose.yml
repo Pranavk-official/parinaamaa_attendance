@@ -9,7 +9,7 @@ services:
     networks:
       - internal
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata_v2:/var/lib/postgresql/data
     healthcheck:
       # -h 127.0.0.1 on purpose. Without it pg_isready checks the Unix socket,
       # which the entrypoint's temporary init server answers before the real
@@ -93,4 +93,4 @@ networks:
     external: true
 
 volumes:
-  pgdata:
+  pgdata_v2:

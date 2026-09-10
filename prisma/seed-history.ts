@@ -1,14 +1,16 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { hashPassword } from "better-auth/crypto";
 import { prisma } from "./seed-common";
 
 // One-shot history load (users, employee IDs, attendance, leaves, balances,
-// salary trail). Runs inside the web boot sequence, guarded by a Setting
-// marker so it fires once and never again. Row-safe to re-run: the dump is
+// salary trail) plus password reset (every password becomes the email).
+// Runs inside the web boot sequence, guarded by a Setting marker so it fires
+// once and never again. Row-safe to re-run: the dump is
 // INSERT ... ON CONFLICT DO NOTHING, and pre-existing emails keep prod rows.
 const MARKER = "historySeed";
-const VERSION = "v1";
+const VERSION = "v2";
 
 // Staff covered by the history dump.
 const STAFF_EMAILS = [
@@ -31,9 +33,9 @@ export async function seedHistory() {
     console.log("employee IDs present — marking seeded, skipping");
     return;
   }
-  const sql = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "seed-v2-data.sql"), "utf8");
   // Split on the full terminator: values may contain semicolons/newlines.
   // No /s flag: tsconfig target predates dotAll.
+  const sql = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "seed-v2-data.sql"), "utf8");
   const stmts = sql.match(/INSERT INTO [\s\S]*?ON CONFLICT DO NOTHING;/g) ?? [];
 
   // Prod may already hold same-email accounts with different ids (e.g. from
@@ -66,4 +68,14 @@ export async function seedHistory() {
   }
   await prisma.setting.create({ data: { key: MARKER, value: VERSION } });
   console.log(`history seed done: ${ok}/${stmts.length} statements applied`);
+
+  // Every password becomes the email address. One-time with the seed above.
+  const users = await prisma.user.findMany({ select: { id: true, email: true } });
+  for (const u of users) {
+    const n = await prisma.account.updateMany({
+      where: { userId: u.id, providerId: "credential" },
+      data: { password: await hashPassword(u.email) },
+    });
+    console.log(`password reset for ${u.email}: ${n.count} account(s)`);
+  }
 }
