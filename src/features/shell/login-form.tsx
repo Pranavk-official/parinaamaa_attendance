@@ -62,7 +62,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             onSubmit={(e) => {
               e.preventDefault();
               const form = new FormData(e.currentTarget);
-              const email = String(form.get("email"));
+              const email = String(form.get("email")).trim();
               const password = String(form.get("password"));
               setPending(true);
               authClient.signIn.email(

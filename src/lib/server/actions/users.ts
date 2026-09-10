@@ -203,3 +203,28 @@ export async function deleteUserAction(id: string) {
   revalidatePath("/users");
   return { ok: true as const };
 }
+
+// Re-hashes and replaces the credential password. Fixes accounts whose stored
+// hash does not match the intended password (e.g. mangled by the old Excel
+// import that trimmed/coerced the password cell).
+export async function resetUserPasswordAction(id: string, password: string) {
+  const actor = await mustUser();
+  requirePermission(actor, "manage:users");
+
+  if (password.length < 8) return { error: "Password must be at least 8 characters" };
+  const target = await prisma.user.findUnique({ where: { id } });
+  if (!target) return { error: "User not found" };
+  if (target.isSuperAdmin && !actor.isSuperAdmin) {
+    return { error: "Only super admins can reset a super admin" };
+  }
+
+  const { hashPassword } = await import("better-auth/crypto");
+  const hashed = await hashPassword(password);
+  const updated = await prismaWithAudit(actor.id).account.updateMany({
+    where: { userId: id, providerId: "credential" },
+    data: { password: hashed },
+  });
+  if (updated.count === 0) return { error: "No password account found for this user" };
+  await prisma.session.deleteMany({ where: { userId: id } });
+  return { ok: true as const };
+}

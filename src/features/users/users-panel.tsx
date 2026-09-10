@@ -65,7 +65,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { createUserAction, updateUserAction, deleteUserAction } from "@/lib/server/actions/users";
+import { createUserAction, updateUserAction, deleteUserAction, resetUserPasswordAction } from "@/lib/server/actions/users";
 import { UsersImport } from "@/features/users/users-import";
 import { isLeaveExempt } from "@/lib/domain/leave-policy";
 import type { LeaveType, SalaryBasis } from "@/generated/prisma/client";
@@ -400,6 +400,7 @@ function EditUserDialog({
   );
   const [salary, setSalary] = useState(user.salary === null ? "" : String(user.salary));
   const [annual, setAnnual] = useState(user.annualSalary);
+  const [newPassword, setNewPassword] = useState("");
 
   const submit = () => {
     startTransition(async () => {
@@ -423,6 +424,19 @@ function EditUserDialog({
       toast.success("User updated");
       setOpen(false);
       router.refresh();
+    });
+  };
+
+  const resetOnly = () => {
+    if (!newPassword) return;
+    startTransition(async () => {
+      const pw = await resetUserPasswordAction(user.id, newPassword);
+      if (pw.error) {
+        toast.error(pw.error);
+        return;
+      }
+      toast.success(`Password set for ${user.name}`);
+      setNewPassword("");
     });
   };
 
@@ -499,6 +513,40 @@ function EditUserDialog({
           </FieldGroup>
         </form>
       )}
+      {/* Standalone reset: visible on every account dialog, including Admin and
+          Super Admin rows where profile editing is locked. The server action
+          still enforces "only super admins reset a super admin". */}
+      <div className="border-t p-4">
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="eu-new-password">Set password</FieldLabel>
+            <div className="flex gap-2">
+              <Input
+                id="eu-new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={8}
+                placeholder="Min 8 characters"
+                autoComplete="new-password"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || !newPassword}
+                onClick={resetOnly}
+              >
+                {pending && <Spinner />}
+                Set
+              </Button>
+            </div>
+            <FieldDescription>
+              Signs {user.name} out everywhere. Super admin passwords can only be
+              set by another super admin.
+            </FieldDescription>
+          </Field>
+        </FieldGroup>
+      </div>
       <Footer>
         <Button type="button" variant="outline" onClick={() => setOpen(false)}>
           Cancel

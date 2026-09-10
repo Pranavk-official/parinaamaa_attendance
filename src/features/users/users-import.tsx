@@ -94,7 +94,12 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+      // raw:false keeps cell text as displayed (leading zeros survive);
+      // defval:"" keeps blank cells as "" instead of undefined.
+      const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
+        defval: "",
+        raw: false,
+      });
       const parsed: ParsedRow[] = [];
       const errs: string[] = [];
       json.forEach((raw, i) => {
@@ -102,7 +107,8 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
         for (const [k, v] of Object.entries(raw)) r[canon(k)] = v;
         const name = String(r.name ?? "").trim();
         const email = String(r.email ?? "").trim();
-        const password = String(r.password ?? "").trim();
+        // Password is significant: never trim, never coerce beyond String().
+        const password = String(r.password ?? "");
         const designation = String(r.designation ?? "").trim();
         const role = String(r.role ?? "Employee").trim();
         const paidPerMonth = num(r.paidpermonth, 1);
@@ -112,6 +118,10 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
         const annualSalary = /^(annual|ctc|yearly|y)$/i.test(String(r.salarybasis ?? "").trim());
         if (!name || !email || !password) {
           errs.push(`Row ${i + 2}: name, email, password required`);
+          return;
+        }
+        if (password.length < 8) {
+          errs.push(`Row ${i + 2}: password must be at least 8 characters`);
           return;
         }
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
