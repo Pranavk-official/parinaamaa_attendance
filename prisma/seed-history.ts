@@ -33,7 +33,8 @@ export async function seedHistory() {
   }
   const sql = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "seed-v2-data.sql"), "utf8");
   // Split on the full terminator: values may contain semicolons/newlines.
-  const stmts = [...sql.matchAll(/INSERT INTO .*?ON CONFLICT DO NOTHING;/gs)].map((m) => m[0]);
+  // No /s flag: tsconfig target predates dotAll.
+  const stmts = sql.match(/INSERT INTO [\s\S]*?ON CONFLICT DO NOTHING;/g) ?? [];
 
   // Prod may already hold same-email accounts with different ids (e.g. from
   // seed.prod). A history row pointing at a skipped user would fail its FK,
