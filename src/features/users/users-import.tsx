@@ -34,8 +34,8 @@ type RoleRow = { id: string; name: string };
 
 // One header row plus a filled example, so the shape is obvious in a spreadsheet.
 const TEMPLATE = [
-  "name,email,password,designation,role,salary,salaryBasis,paidPerMonth,compensatory,joinedDate,relievingDate",
-  "Asha Nair,asha@company.local,changeme123,Software Engineer,Employee,85000,monthly,1,0,2026-09-09,",
+  "name,email,employeeId,password,designation,role,salary,salaryBasis,paidPerMonth,compensatory,joinedDate,relievingDate",
+  "Asha Nair,asha@company.local,,changeme123,Software Engineer,Employee,85000,monthly,1,0,2026-09-09,",
 ].join("\n");
 
 function downloadTemplate(format: "csv" | "xlsx") {
@@ -60,6 +60,7 @@ function downloadTemplate(format: "csv" | "xlsx") {
 type ParsedRow = {
   name: string;
   email: string;
+  employeeId: string | null;
   password: string;
   designation: string;
   role: string;
@@ -125,6 +126,8 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
         for (const [k, v] of Object.entries(raw)) r[canon(k)] = v;
         const name = String(r.name ?? "").trim();
         const email = String(r.email ?? "").trim();
+        const employeeIdRaw = String(r.employeeid ?? "").trim();
+        const employeeId = employeeIdRaw === "" ? null : employeeIdRaw;
         // Password is significant: never trim, never coerce beyond String().
         const password = String(r.password ?? "");
         const designation = String(r.designation ?? "").trim();
@@ -179,6 +182,7 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
         parsed.push({
           name,
           email,
+          employeeId,
           password,
           designation,
           role,
@@ -194,7 +198,7 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
       setErrors(errs);
     } catch {
       setErrors([
-        "Could not read file. Use .csv or .xlsx with columns: name, email, password, designation, role, salary, salaryBasis, paidPerMonth, compensatory, joinedDate, relievingDate.",
+        "Could not read file. Use .csv or .xlsx with columns: name, email, employeeId, password, designation, role, salary, salaryBasis, paidPerMonth, compensatory, joinedDate, relievingDate.",
       ]);
     }
   };
@@ -209,6 +213,7 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
         const res = await upsertUserAction({
           name: r.name,
           email: r.email,
+          employeeId: r.employeeId,
           password: r.password,
           designation: r.designation,
           roleId: roleById.get(r.role)!,
@@ -257,7 +262,8 @@ export function UsersImport({ roles }: { roles: RoleRow[] }) {
       <Header>
         <Title>Import users</Title>
         <Description>
-          Upload a .csv or .xlsx file. Columns: name, email, password, designation,
+          Upload a .csv or .xlsx file. Columns: name, email, employeeId (optional,
+          blank = unassigned), password, designation,
           role (defaults to Employee), salary, salaryBasis (annual or monthly,
           defaults to monthly), paidPerMonth (defaults to 1), compensatory (defaults
           to 0), joinedDate (YYYY-MM-DD, blank = accrual from fiscal start),

@@ -19,6 +19,7 @@ export const ROLES = [
 export type SeedUser = {
   name: string;
   email: string;
+  employeeId?: string;
   password: string;
   designation: string;
   role: string;
@@ -65,6 +66,7 @@ export async function ensureUser(u: SeedUser) {
     where: { id: userId },
     data: {
       roleId: (await prisma.role.findUniqueOrThrow({ where: { name: u.role } })).id,
+      employeeId: u.employeeId ?? null,
       designation: u.designation,
       isSuperAdmin: u.isSuperAdmin ?? false,
       salary: u.salary ?? null,

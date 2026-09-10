@@ -3,8 +3,8 @@ import { prisma, prismaWithAudit } from "@/lib/db/prisma";
 import { fiscalStartToKey, type FiscalStart } from "@/lib/domain/fiscal";
 
 // Salary month runs from the Nth of month M to the day before N of month M+1.
-// N=1 is a plain calendar month; N=2 is the "paid on the 2nd" cycle.
-const DEFAULT_PAYROLL_DAY = 2;
+// N=1 is a plain calendar month, matching the salary sheet.
+const DEFAULT_PAYROLL_DAY = 1;
 const KEY = "payrollDay";
 
 export const getPayrollDay = cache(async (): Promise<number> => {

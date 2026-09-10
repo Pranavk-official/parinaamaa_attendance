@@ -57,3 +57,6 @@ next-env.d.ts
 .agents/
 .claude/
 skills-lock.json
+
+# local database dumps
+attendance-*.sql

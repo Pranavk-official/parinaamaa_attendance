@@ -89,6 +89,7 @@ type UserRow = {
   id: string;
   name: string;
   email: string;
+  employeeId: string | null;
   designation: string | null;
   isSuperAdmin: boolean;
   isBlocked: boolean;
@@ -214,6 +215,7 @@ function CreateUserDialog({
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
   const [designation, setDesignation] = useState("");
   const [roleId, setRoleId] = useState(roles[0]?.id ?? "");
@@ -228,6 +230,7 @@ function CreateUserDialog({
   const reset = () => {
     setName("");
     setEmail("");
+    setEmployeeId("");
     setPassword("");
     setDesignation("");
     setRoleId(roles[0]?.id ?? "");
@@ -244,6 +247,7 @@ function CreateUserDialog({
       const res = await createUserAction({
         name,
         email,
+        employeeId: employeeId || null,
         password,
         designation,
         roleId,
@@ -300,6 +304,15 @@ function CreateUserDialog({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="nu-employee-id">Employee ID</FieldLabel>
+            <Input
+              id="nu-employee-id"
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
+              placeholder="e.g. 0011"
             />
           </Field>
           <Field>
@@ -430,6 +443,7 @@ function EditUserDialog({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState(user.name);
+  const [employeeId, setEmployeeId] = useState(user.employeeId ?? "");
   const [designation, setDesignation] = useState(user.designation ?? "");
   const [roleId, setRoleId] = useState(user.role?.id ?? roles[0]?.id ?? "");
   const exempt = isLeaveExempt(user);
@@ -449,6 +463,7 @@ function EditUserDialog({
     startTransition(async () => {
       const res = await updateUserAction(user.id, {
         name,
+        employeeId: employeeId || null,
         designation,
         roleId,
         joinedDate: joinedDate || null,
@@ -523,6 +538,15 @@ function EditUserDialog({
             <Field>
               <FieldLabel htmlFor="eu-name">Name</FieldLabel>
               <Input id="eu-name" value={name} onChange={(e) => setName(e.target.value)} required />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="eu-employee-id">Employee ID</FieldLabel>
+              <Input
+                id="eu-employee-id"
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                placeholder="e.g. 0011"
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="eu-designation">Designation</FieldLabel>
@@ -803,7 +827,7 @@ export function UsersPanel({
   const shown = visible.filter((u) => {
     if (roleFilter !== "all" && u.role?.id !== roleFilter) return false;
     if (!needle) return true;
-    return [u.name, u.email, u.designation, u.role?.name]
+    return [u.name, u.email, u.employeeId, u.designation, u.role?.name]
       .join(" ")
       .toLowerCase()
       .includes(needle);
@@ -891,6 +915,7 @@ export function UsersPanel({
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>Employee ID</TableHead>
                 <TableHead className="hidden md:table-cell">Designation</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead className="hidden md:table-cell">Salary</TableHead>
@@ -907,6 +932,9 @@ export function UsersPanel({
                       <span className="ml-2 font-normal text-muted-foreground">(you)</span>
                     )}
                     <span className="block font-normal text-muted-foreground">{u.email}</span>
+                  </TableCell>
+                  <TableCell data-label="Employee ID" className="whitespace-nowrap tabular-nums">
+                    {u.employeeId ?? <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell
                     data-label="Designation"

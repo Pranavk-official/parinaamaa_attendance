@@ -10,6 +10,7 @@ import { getPayrollDay } from "@/lib/domain/settings";
 export type PayrollRow = {
   name: string;
   email: string;
+  employeeId: string;
   designation: string;
   presentDays: number;
   totalHours: number;
@@ -26,6 +27,7 @@ export type PayrollRow = {
 const HEADERS = [
   "name",
   "email",
+  "employee_id",
   "designation",
   "present_days",
   "total_hours",
@@ -43,6 +45,7 @@ function cells(r: PayrollRow) {
   return [
     r.name,
     r.email,
+    r.employeeId,
     r.designation,
     r.presentDays,
     r.totalHours,
@@ -79,9 +82,12 @@ export async function collectPayrollRows(period?: PayrollPeriod) {
         id: true,
         name: true,
         email: true,
+        employeeId: true,
         designation: true,
         salary: true,
         salaryBasis: true,
+        joinedDate: true,
+        relievingDate: true,
       },
     }),
     prisma.attendance.findMany({
@@ -92,6 +98,16 @@ export async function collectPayrollRows(period?: PayrollPeriod) {
       where: { status: "APPROVED", startDate: { lt: endExclusive }, endDate: { gte: start } },
     }),
   ]);
+
+  // Salary changes mid-history, so each row is valued at the latest record
+  // before the period starts — not at today's salary.
+  const history = await prisma.salaryHistory.findMany({
+    where: { userId: { in: users.map((u) => u.id) }, createdAt: { lte: start } },
+    orderBy: { createdAt: "desc" },
+  });
+  // History comes back newest first; keep the latest record per user.
+  const payAt = new Map<string, (typeof history)[number]>();
+  for (const h of history) payAt.set(h.userId, payAt.get(h.userId) ?? h);
 
   const attendanceByUser = new Map<string, typeof attendances>();
   for (const a of attendances) {
@@ -108,18 +124,35 @@ export async function collectPayrollRows(period?: PayrollPeriod) {
 
   // Whole period length in days, half-open: [start, endExclusive).
   const daysInMonth = Math.round((endExclusive.getTime() - start.getTime()) / 86_400_000);
-  const rows: PayrollRow[] = users.map((u) => {
+  const day = 86_400_000;
+  const rows: PayrollRow[] = users.flatMap((u) => {
     const att = attendanceByUser.get(u.id) ?? [];
     const leaves = leavesByUser.get(u.id) ?? [];
+    // Staff who joined after the period started (or were relieved before it)
+    // have no sheet row — unless they actually have days in the period.
+    // activeUserWhere already drops the relieved; the joined check needs the
+    // period, so it lives here.
+    if (att.length === 0 && leaves.length === 0) {
+      if (u.joinedDate && new Date(u.joinedDate) > start) return [];
+    }
     const unpaidLeaveDays = leaves.reduce(
       (acc, l) =>
         acc + (isUnpaidLeave(l.type) ? countDays(l.startDate, l.endDate, l.isHalfDay) : 0),
       0
     );
+    const h = payAt.get(u.id);
+    const salary = h ? h.salary : u.salary;
+    const basis = h ? h.basis : u.salaryBasis;
+    // Joining/exit months pay only the employed days (relieving day counts).
+    const employedFrom = u.joinedDate ? Math.max(start.getTime(), new Date(u.joinedDate).getTime()) : start.getTime();
+    const employedTo = u.relievingDate
+      ? Math.min(endExclusive.getTime(), new Date(u.relievingDate).getTime() + day)
+      : endExclusive.getTime();
+    const employedFactor = Math.max(0, employedTo - employedFrom) / day / daysInMonth;
     const monthlyGross =
-      u.salary === null
+      salary === null
         ? null
-        : Number(u.salary) / (u.salaryBasis === "ANNUAL" ? 12 : 1);
+        : (Number(salary) / (basis === "ANNUAL" ? 12 : 1)) * employedFactor;
     const deduction =
       monthlyGross === null
         ? null
@@ -131,6 +164,7 @@ export async function collectPayrollRows(period?: PayrollPeriod) {
     return {
       name: u.name,
       email: u.email,
+      employeeId: u.employeeId ?? "",
       designation: u.designation ?? "",
       presentDays: att.length,
       totalHours: Math.round(totalHours * 100) / 100,

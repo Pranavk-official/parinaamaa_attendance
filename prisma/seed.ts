@@ -183,6 +183,14 @@ async function seedDummyData(userId: string, seedOffset: number) {
 }
 
 run(async () => {
+  // The dev container runs this on every start. Never reseed a database that
+  // already has real data (employee IDs mark it) — that would resurrect the
+  // dummy staff on each restart.
+  if (await prisma.user.count({ where: { employeeId: { not: null } } })) {
+    console.log("Real data present — skipping dummy seed.");
+    return;
+  }
+
   await upsertRoles();
 
   let employeeIdx = 0;

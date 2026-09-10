@@ -24,6 +24,36 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
+  # One-shot data seed: restores users, employee IDs, attendance, leaves,
+  # balances and salary history into a fresh database on first deploy, then
+  # never again — the guard skips when users already exist. restart "no" so
+  # it does not loop; web waits for it to finish.
+  data-migrate:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - ./prisma/seed-v2-data.sql:/seed-v2-data.sql:ro
+    command:
+      - sh
+      - -c
+      - |
+        users=$$(psql -h db -U postgres -d attendance -tAc 'select count(*) from "user"' 2>/dev/null) || users=empty
+        if [ "$$users" = "0" ] || [ "$$users" = "empty" ]; then
+          psql -h db -U postgres -d attendance -f /seed-v2-data.sql && echo "data restored"
+        else
+          echo "users present ($$users) — skipping one-shot restore"
+        fi
+    networks:
+      - internal
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   web:
     build:
       context: .
@@ -56,6 +86,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      data-migrate:
+        condition: service_completed_successfully
     # List form, not a mapping: Dokploy appends its own Traefik labels to
     # this list at deploy time, and cannot merge them into a mapping.
     labels:

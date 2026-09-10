@@ -123,7 +123,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
                     <TableCell data-label="Employee" className="font-medium whitespace-nowrap">
                       {r.name}
                       <span className="block font-normal text-muted-foreground">
-                        {r.designation || r.email}
+                        {[r.employeeId, r.designation || r.email].filter(Boolean).join(" · ")}
                       </span>
                     </TableCell>
                     <TableCell data-label="Present" className="text-right tabular-nums">{r.presentDays}</TableCell>

@@ -26,6 +26,7 @@ export type SalaryInput = {
 export type CreateUserInput = {
   name: string;
   email: string;
+  employeeId: string | null;
   password: string;
   designation: string;
   roleId: string;
@@ -88,6 +89,12 @@ function dateOrNull(v: string | null) {
   return v ? new Date(`${v}T00:00:00Z`) : null;
 }
 
+// Blank means no ID assigned yet; IDs are unique when present.
+function empIdOrNull(v: string | null | undefined) {
+  const t = (v ?? "").trim();
+  return t === "" ? null : t;
+}
+
 function assertAssignableRole(actor: { isSuperAdmin: boolean }, role: { name: string }) {
   if (role.name === "Super Admin" && !actor.isSuperAdmin) {
     return "Only super admins can assign the Super Admin role";
@@ -119,6 +126,11 @@ export async function createUserAction(input: CreateUserInput) {
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return { error: "A user with this email already exists" };
+  const employeeId = empIdOrNull(input.employeeId);
+  if (employeeId) {
+    const clash = await prisma.user.findUnique({ where: { employeeId } });
+    if (clash) return { error: `Employee ID ${employeeId} is already assigned` };
+  }
 
   const { user } = await auth.api.signUpEmail({
     body: { name, email, password: input.password },
@@ -130,6 +142,7 @@ export async function createUserAction(input: CreateUserInput) {
     where: { id: user.id },
     data: {
       roleId: role.id,
+      employeeId,
       designation: input.designation.trim(),
       joinedDate: dateOrNull(input.joinedDate),
       relievingDate: dateOrNull(input.relievingDate),
@@ -155,6 +168,7 @@ export async function createUserAction(input: CreateUserInput) {
 
 export type UpdateUserInput = {
   name: string;
+  employeeId: string | null;
   designation: string;
   roleId: string;
   joinedDate: string | null;
@@ -187,10 +201,17 @@ export async function updateUserAction(id: string, input: UpdateUserInput) {
   const roleError = assertAssignableRole(actor, role);
   if (roleError) return { error: roleError };
 
+  const employeeId = empIdOrNull(input.employeeId);
+  if (employeeId) {
+    const clash = await prisma.user.findUnique({ where: { employeeId } });
+    if (clash && clash.id !== id) return { error: `Employee ID ${employeeId} is already assigned` };
+  }
+
   await prismaWithAudit(actor.id).user.update({
     where: { id },
     data: {
       name,
+      employeeId,
       roleId: role.id,
       designation: input.designation.trim() || null,
       joinedDate: dateOrNull(input.joinedDate),
@@ -320,11 +341,20 @@ export async function upsertUserAction(input: CreateUserInput) {
     return { error: "Only super admins can edit a super admin" };
   }
 
+  const employeeId = empIdOrNull(input.employeeId);
+  if (employeeId) {
+    const clash = await prisma.user.findUnique({ where: { employeeId } });
+    if (clash && clash.id !== existing.id) {
+      return { error: `Employee ID ${employeeId} is already assigned` };
+    }
+  }
+
   const db = prismaWithAudit(actor.id);
   await db.user.update({
     where: { id: existing.id },
     data: {
       name,
+      employeeId,
       roleId: role.id,
       designation: input.designation.trim(),
       joinedDate: dateOrNull(input.joinedDate),
