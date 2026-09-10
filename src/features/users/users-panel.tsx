@@ -40,6 +40,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
   Drawer,
   DrawerContent,
   DrawerDescription,
@@ -440,13 +449,13 @@ function EditUserDialog({
     });
   };
 
-  // Drawer on phones, centered modal on desktop. Same form both ways — only
-  // the container and header/footer change with the breakpoint.
-  const Header = isMobile ? DrawerHeader : DialogHeader;
-  const Footer = isMobile ? DrawerFooter : DialogFooter;
-  const Title = isMobile ? DrawerTitle : DialogTitle;
-  const Description = isMobile ? DrawerDescription : DialogDescription;
-  const Trigger = isMobile ? DrawerTrigger : DialogTrigger;
+  // Drawer bottom-sheet on phones, right off-canvas sheet on desktop. Same
+  // form both ways — only the container and header/footer change.
+  const Header = isMobile ? DrawerHeader : SheetHeader;
+  const Footer = isMobile ? DrawerFooter : SheetFooter;
+  const Title = isMobile ? DrawerTitle : SheetTitle;
+  const Description = isMobile ? DrawerDescription : SheetDescription;
+  const Trigger = isMobile ? DrawerTrigger : SheetTrigger;
 
   const inside = (
     <>
@@ -607,10 +616,10 @@ function EditUserDialog({
       </DrawerContent>
     </Drawer>
   ) : (
-    <Dialog {...rootProps}>
+    <Sheet {...rootProps}>
       <Trigger render={editTrigger} />
-      <DialogContent>{inside}</DialogContent>
-    </Dialog>
+      <SheetContent>{inside}</SheetContent>
+    </Sheet>
   );
 }
 

@@ -10,6 +10,7 @@ import {
   Ellipsis,
   FileSpreadsheet,
   FileText,
+  Fingerprint,
   Inbox,
   LayoutDashboard,
   LogOut,
@@ -59,6 +60,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { ThemeSwitcher } from "@/features/shell/theme-switcher";
+import { usePasskeySupported } from "@/hooks/use-passkey-support";
 import {
   Sidebar,
   SidebarContent,
@@ -187,11 +189,19 @@ function NavUser({
   onSignOut: () => void;
 }) {
   const { isMobile } = useSidebar();
+  const passkeySupported = usePasskeySupported();
   const avatar = (
     <Avatar>
       <AvatarFallback>{initials(name)}</AvatarFallback>
     </Avatar>
   );
+
+  // Registration needs a signed-in session, so it lives here — not on login.
+  const addPasskey = async () => {
+    const res = await authClient.passkey.addPasskey();
+    if (res?.error) toast.error(res.error.message ?? "Could not set up passkey");
+    else toast.success("Passkey added — use it on your next sign-in");
+  };
 
   return (
     <SidebarMenu>
@@ -226,6 +236,12 @@ function NavUser({
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
+            {passkeySupported && (
+              <DropdownMenuItem onClick={addPasskey}>
+                <Fingerprint />
+                Set up passkey
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={onSignOut}>
               <LogOut />
               Sign out
