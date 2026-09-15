@@ -12,8 +12,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Calendar } from "@/components/ui/calendar";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { FieldLegend, FieldSet } from "@/components/ui/field";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type Preset = "today" | "week" | "month" | "custom";
 
@@ -23,6 +31,12 @@ const PRESETS: { value: Preset; label: string }[] = [
   { value: "month", label: "Month" },
   { value: "custom", label: "Custom" },
 ];
+
+// Base UI's Select.Value prints the raw value, so the labels live here.
+const MONTHS = Array.from({ length: 12 }, (_, i) => ({
+  value: String(i + 1).padStart(2, "0"),
+  label: format(new Date(2000, i, 1), "LLLL"),
+}));
 
 const iso = (d: Date) => format(d, "yyyy-MM-dd");
 const monthKey = (d: Date) => format(d, "yyyy-MM");
@@ -74,23 +88,26 @@ export function ReportExport({ preset, month, from, to }: { preset?: string; mon
     router.replace(`/reports?${new URLSearchParams(params).toString()}`);
   const pickPreset = (p: Preset) => go({ preset: p, ...presetParams(p) });
 
-  const pickerLabel =
-    active === "month"
-      ? month
-        ? format(toDate(month), "MMMM yyyy")
-        : "Pick a month"
-      : active === "today"
-        ? from
-          ? format(toDate(from), "EEE d MMM yyyy")
-          : "Pick a date"
-        : range?.to && range.to > range.from
-          ? `${format(range.from, "d MMM")} – ${format(range.to, "d MMM yyyy")}`
-          : range?.from
-            ? "Pick an end date"
-            : "Pick dates";
+  // A month is two list choices, not a day on a grid.
+  const [monthYear, monthNo] = (month ?? monthKey(new Date())).split("-");
+  const thisYear = new Date().getFullYear();
+  const years = [
+    ...new Set([...Array.from({ length: 6 }, (_, i) => String(thisYear - i)), monthYear]),
+  ].sort((a, b) => Number(b) - Number(a));
 
-  const exportHref = (format: "csv" | "xlsx") => {
-    const params = new URLSearchParams({ format });
+  const pickerLabel =
+    active === "today"
+      ? from
+        ? format(toDate(from), "EEE d MMM yyyy")
+        : "Pick a date"
+      : range?.to && range.to > range.from
+        ? `${format(range.from, "d MMM")} – ${format(range.to, "d MMM yyyy")}`
+        : range?.from
+          ? "Pick an end date"
+          : "Pick dates";
+
+  const exportHref = (kind: "csv" | "xlsx") => {
+    const params = new URLSearchParams({ format: kind });
     if (from && to) {
       params.set("from", from);
       params.set("to", to);
@@ -101,7 +118,14 @@ export function ReportExport({ preset, month, from, to }: { preset?: string; mon
   };
 
   const onSingle = (d: Date) => go({ preset: "today", from: iso(d), to: iso(d) });
-  const onMonth = (d: Date) => go({ preset: "month", month: monthKey(d) });
+  // Week is one click: any day snaps to its Mon-Sun week.
+  const onWeek = (d: Date) =>
+    go({
+      preset: "week",
+      from: iso(startOfWeek(d, { weekStartsOn: 1 })),
+      to: iso(endOfWeek(d, { weekStartsOn: 1 })),
+    });
+  const onMonth = (key: string) => go({ preset: "month", month: key });
   const onRange = (r: { from?: Date; to?: Date } | undefined) => {
     if (!r?.from) return setPartial(null);
     if (r.to && r.to > r.from) {
@@ -114,58 +138,84 @@ export function ReportExport({ preset, month, from, to }: { preset?: string; mon
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-6">
-      <Field>
-        <FieldLabel>Payroll period</FieldLabel>
-        <div className="flex flex-col gap-3">
-          <ButtonGroup>
-            {PRESETS.map((p) => (
-              <Button
-                key={p.value}
-                variant={active === p.value ? "default" : "outline"}
-                onClick={() => pickPreset(p.value)}
-              >
-                {p.label}
-              </Button>
-            ))}
-          </ButtonGroup>
+      <FieldSet className="gap-3">
+        <FieldLegend variant="label" className="mb-0">
+          Payroll period
+        </FieldLegend>
+        <ToggleGroup
+          variant="outline"
+          spacing={0}
+          value={[active]}
+          onValueChange={([p]) => isPreset(p) && pickPreset(p)}
+          aria-label="Payroll period preset"
+        >
+          {PRESETS.map((p) => (
+            <ToggleGroupItem key={p.value} value={p.value}>
+              {p.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
 
+        {active === "month" ? (
+          <ButtonGroup>
+            <Select value={monthNo} onValueChange={(v) => v && onMonth(`${monthYear}-${v}`)}>
+              <SelectTrigger className="w-36" aria-label="Month">
+                <SelectValue>{(v: string) => MONTHS[Number(v) - 1]?.label}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {MONTHS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={monthYear} onValueChange={(v) => v && onMonth(`${v}-${monthNo}`)}>
+              <SelectTrigger className="w-24" aria-label="Year">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((y) => (
+                  <SelectItem key={y} value={y}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </ButtonGroup>
+        ) : (
           <Popover>
             <PopoverTrigger
               render={
-                <Button variant="outline" className="w-56 justify-start font-normal">
+                <Button variant="outline" className="w-60 justify-start font-normal">
                   {active === "today" ? <CalendarDays /> : <CalendarRange />}
                   {pickerLabel}
                 </Button>
               }
             />
             <PopoverContent align="start" className="w-auto p-0" sideOffset={4}>
-              {active === "today" ? (
-                <Calendar
-                  mode="single"
-                  selected={from ? toDate(from) : undefined}
-                  onSelect={(d) => d && onSingle(d)}
-                  autoFocus
-                />
-              ) : active === "month" ? (
-                <Calendar
-                  mode="single"
-                  selected={month ? toDate(month) : undefined}
-                  onSelect={(d) => d && onMonth(d)}
-                  autoFocus
-                />
-              ) : (
+              {active === "custom" ? (
                 <Calendar
                   mode="range"
                   selected={range ? { from: range.from, to: range.to } : undefined}
                   onSelect={onRange}
                   autoFocus
                 />
+              ) : (
+                <Calendar
+                  mode="single"
+                  showWeekNumber={active === "week"}
+                  selected={range?.from ?? (from ? toDate(from) : undefined)}
+                  onSelect={(d) => d && (active === "week" ? onWeek(d) : onSingle(d))}
+                  autoFocus
+                />
               )}
             </PopoverContent>
           </Popover>
-        </div>
-      </Field>
-      <div className="flex w-full gap-2 sm:ml-auto sm:w-auto">
+        )}
+      </FieldSet>
+
+      <ButtonGroup className="w-full sm:ml-auto sm:w-auto">
         <Button render={<a href={exportHref("xlsx")} />} className="flex-1 sm:flex-none">
           <FileSpreadsheet />
           Export XLSX
@@ -174,7 +224,7 @@ export function ReportExport({ preset, month, from, to }: { preset?: string; mon
           <FileDown />
           CSV
         </Button>
-      </div>
+      </ButtonGroup>
     </div>
   );
 }

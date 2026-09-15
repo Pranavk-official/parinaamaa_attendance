@@ -48,7 +48,7 @@ files read it. Generate secrets with `openssl rand -hex 32`.
 | `BETTER_AUTH_URL` | yes | Public origin, e.g. `https://attendance.example.com`. Used for auth callbacks and for the "Approve here" link in leave email. |
 | `CRON_SECRET` | yes | Bearer token for `POST /api/cron/export-payroll`. The scheduler reads it from inside the web container. |
 | `OFFICE_IP_ADDRESS` | no | Public IP of the office. Set it and `/attendance/wfo-punch` (see [the office QR code](#the-office-qr-code)) rejects scans from anywhere else. **Leave blank and the network guard is off** — any signed-in scan punches in. |
-| `MANAGER_EMAIL` | no | Overrides who leave mail is addressed to. Defaults to the address in `src/lib/leave-mail.ts`. |
+| `MANAGER_EMAIL` | no | Overrides who leave mail is addressed to. Defaults to the address in `src/lib/domain/leave-mail.ts`. |
 | `PORT_EXTERNAL` | no | Host port published by compose. Default `3000`. Change it when the host already uses 3000 — Dokploy's own UI does. |
 | `PORT_INTERNAL` | no | Port Next listens on inside the container, passed through as `PORT`. Default `3000`. The healthcheck and the payroll cron both read it, so they follow automatically. |
 
@@ -56,9 +56,9 @@ files read it. Generate secrets with `openssl rand -hex 32`.
 
 | What | Where |
 | --- | --- |
-| Leave email recipient, Cc, and the greeting name | `src/lib/leave-mail.ts` (`LEAVE_MAIL`) |
-| Wording of the request, approval and rejection emails | `src/lib/leave-mail.ts` |
-| Which leave types carry a balance | `src/lib/leave-policy.ts` (`ALLOCATABLE_LEAVE_TYPES`) |
+| Leave email recipient, Cc, and the greeting name | `src/lib/domain/leave-mail.ts` (`LEAVE_MAIL`) |
+| Wording of the request, approval and rejection emails | `src/lib/domain/leave-mail.ts` |
+| Which leave types carry a balance | `src/lib/domain/leave-policy.ts` (`ALLOCATABLE_LEAVE_TYPES`) |
 | Loss-of-pay formula | `src/lib/domain/fiscal.ts` (`unpaidDeduction`) |
 | Fiscal year (April–March) | `src/lib/domain/fiscal.ts` |
 | Roles and their permissions | `prisma/seed-common.ts` (`ROLES`) |
@@ -227,7 +227,7 @@ blocked by a balance check. Employees are the tracked staff.
   The credit lands on punch-out, once per day, and raises the `COMPENSATORY`
   balance for the fiscal year the day falls in. Leave-exempt staff carry no
   balances, so they earn nothing. The thresholds live in `compensatoryEarned`
-  in `src/lib/leave-policy.ts`.
+  in `src/lib/domain/leave-policy.ts`.
 
 `CompanyHoliday` has no admin screen yet; add rows directly in the database.
 
@@ -268,7 +268,7 @@ Punching out **before 14:00** on a working day means only the morning was
 worked. The afternoon is filed as a half-day leave request — `PENDING`, so a
 manager still decides — paid while the paid balance lasts and unpaid `REGULAR`
 once it runs out, exactly as a hand-filed request would be. The boundary is
-`leftEarly` in `src/lib/leave-policy.ts`.
+`leftEarly` in `src/lib/domain/leave-policy.ts`.
 
 Signed-in employees can scan the entrance QR straight from the dashboard, so
 punching in as WFO does not mean going back through the login page.
