@@ -3,6 +3,7 @@
 // below. Use prisma/seed.ts for local dummy data.
 import { ensureUser, prisma, run, upsertRoles, type SeedUser } from "./seed-common";
 import { seedHistory } from "./seed-history";
+import { seedHolidays } from "./seed-holidays";
 
 // The password is the email address for the first sign-in. Both accounts are
 // leave-exempt (Super Admin, and Admin carries permissions), so neither gets a
@@ -28,6 +29,7 @@ const USERS: SeedUser[] = [
 run(async () => {
   // History first: no-op after its own once-ever marker is set.
   await seedHistory();
+  await seedHolidays();
 
   // Seed once, on first boot only. ensureUser() skips creating an account that
   // already exists, but it still rewrites roleId/designation/isSuperAdmin/salary,

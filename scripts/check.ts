@@ -7,6 +7,7 @@ import {
   monthsAccrued,
   monthsElapsedInFiscalYear,
   remainingDays,
+  toDateOnly,
   unpaidDeduction,
 } from "../src/lib/domain/fiscal";
 import { compensatoryEarned, leftEarly, resolveLeaveType } from "../src/lib/domain/leave-policy";
@@ -115,10 +116,18 @@ assert.equal(compensatoryEarned(4.5), 1); // half the shift still rounds up to a
 assert.equal(compensatoryEarned(4.49), 0.5);
 assert.equal(compensatoryEarned(0.9), 0); // punched straight back out
 
-// Leaving before the 14:00 session boundary is a half day; after it is not.
-assert.equal(leftEarly(new Date(2026, 8, 7, 13, 59)), true);
-assert.equal(leftEarly(new Date(2026, 8, 7, 14, 0)), false);
-assert.equal(leftEarly(new Date(2026, 8, 7, 18, 30)), false);
+// Leaving before the 14:00 IST session boundary is a half day; after it is not.
+// Instants are absolute so the result cannot depend on the server's TZ.
+assert.equal(leftEarly(new Date("2026-09-07T13:59:00+05:30")), true);
+assert.equal(leftEarly(new Date("2026-09-07T14:00:00+05:30")), false);
+assert.equal(leftEarly(new Date("2026-09-07T18:30:00+05:30")), false);
+assert.equal(leftEarly(new Date("2026-09-07T11:30:00Z")), false); // 17:00 IST on a UTC box
+
+// Attendance day is the IST date: 01:00 IST is still that day, not yesterday in UTC.
+assert.equal(toDateOnly(new Date("2026-09-08T01:00:00+05:30")).toISOString(), "2026-09-08T00:00:00.000Z");
+assert.equal(toDateOnly(new Date("2026-09-08T23:59:00+05:30")).toISOString(), "2026-09-08T00:00:00.000Z");
+// @db.Date values (UTC midnight) round-trip unchanged.
+assert.equal(toDateOnly(new Date("2026-09-08T00:00:00Z")).toISOString(), "2026-09-08T00:00:00.000Z");
 
 // Payroll month [2 Feb, 2 Mar): label is the month key, end stays exclusive.
 const feb = monthRange(2, "2026-02");

@@ -19,7 +19,7 @@ export async function punchIn(userId: string, preferred: "WFO" | "WFH") {
   // Idempotent: punch-in at 9am, open again at noon, no duplicate row.
   if (existing) return { alreadyPunched: true, attendance: existing };
 
-  const day = now.getDay();
+  const day = date.getUTCDay();
   const isWeekend = day === 0 || day === 6;
   const holiday = await prisma.companyHoliday.findUnique({ where: { date } });
   const type: AttendanceType = isWeekend || holiday ? "OFFDAY_WORK" : preferred;

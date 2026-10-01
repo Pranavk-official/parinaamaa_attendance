@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { mustUser, requirePermission } from "@/lib/auth/auth-user";
 import { setPayrollDay, setFiscalStart } from "@/lib/domain/settings";
 import { fiscalStartToKey, type FiscalStart } from "@/lib/domain/fiscal";
+import { prisma } from "@/lib/db/prisma";
 
 export async function updatePayrollDayAction(day: number) {
   const actor = await mustUser();
@@ -32,5 +33,35 @@ export async function updateFiscalStartAction(start: FiscalStart) {
   revalidatePath("/reports");
   revalidatePath("/");
   revalidatePath("/users");
+  return { ok: true as const };
+}
+const HOLIDAY_PATHS = ["/settings", "/"];
+
+export async function saveHolidayAction(input: { date: string; name: string }) {
+  const actor = await mustUser();
+  requirePermission(actor, "manage:users");
+
+  const name = input.name.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !name) {
+    return { error: "Pick a date and give the holiday a name" };
+  }
+  const date = new Date(`${input.date}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return { error: "Invalid date" };
+
+  // One holiday per date: saving an existing date renames it.
+  await prisma.companyHoliday.upsert({
+    where: { date },
+    create: { date, name },
+    update: { name },
+  });
+  HOLIDAY_PATHS.forEach((p) => revalidatePath(p));
+  return { ok: true as const };
+}
+
+export async function deleteHolidayAction(id: string) {
+  const actor = await mustUser();
+  requirePermission(actor, "manage:users");
+  await prisma.companyHoliday.deleteMany({ where: { id } });
+  HOLIDAY_PATHS.forEach((p) => revalidatePath(p));
   return { ok: true as const };
 }

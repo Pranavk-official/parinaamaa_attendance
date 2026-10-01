@@ -7,7 +7,7 @@ import { Fingerprint } from "lucide-react";
 import { usePasskeySupported } from "@/hooks/use-passkey-support";
 
 import { cn } from "cn";
-import { authClient } from "@/lib/auth/auth-client";
+import { authClient, passkeyError } from "@/lib/auth/auth-client";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
@@ -41,12 +41,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
         },
       }
     );
-    if (res.error) {
-      const code = "code" in res.error ? res.error.code : undefined;
-      if (code !== "AUTH_CANCELLED") {
-        toast.error(res.error.message ?? "Passkey sign-in failed");
-      }
-    }
+    if (res.error) toast.error(passkeyError(res.error, "Passkey sign-in failed"));
     setPasskeyPending(false);
   };
 

@@ -52,8 +52,18 @@ export function countDays(start: Date, end: Date, isHalfDay: boolean): number {
   return (isHalfDay ? 0.5 : 1) * Math.max(days, 1);
 }
 
+// The office runs on IST whatever the server clock says. Shifting by the fixed
+// +05:30 offset (India has no DST) and reading UTC fields gives IST wall time.
+export const IST_OFFSET_MS = 330 * 60_000;
+
+export function istWallClock(d: Date): Date {
+  return new Date(d.getTime() + IST_OFFSET_MS);
+}
+
+/** The IST calendar day of `d`, as UTC midnight (what `@db.Date` stores). */
 export function toDateOnly(d: Date): Date {
-  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const ist = istWallClock(d);
+  return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()));
 }
 
 // A payroll month runs [day D of month M, day D of month M+1): the Nth is the

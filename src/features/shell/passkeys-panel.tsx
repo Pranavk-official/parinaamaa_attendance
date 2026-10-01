@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Fingerprint, Plus, Trash2 } from "lucide-react";
-import { authClient } from "@/lib/auth/auth-client";
+import { authClient, passkeyError } from "@/lib/auth/auth-client";
 import { usePasskeySupported } from "@/hooks/use-passkey-support";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -51,12 +51,9 @@ export function PasskeysPanel() {
   const add = () => {
     const label = name.trim();
     startTransition(async () => {
-      const res = await authClient.passkey.addPasskey({
-        ...(label ? { name: label } : {}),
-        authenticatorAttachment: "platform",
-      });
+      const res = await authClient.passkey.addPasskey(label ? { name: label } : {});
       if (res.error) {
-        toast.error(res.error.message ?? "Could not add this passkey");
+        toast.error(passkeyError(res.error, "Could not add this passkey"));
         return;
       }
       setName("");
@@ -104,7 +101,7 @@ export function PasskeysPanel() {
         </div>
         <FieldDescription>
           {supported
-            ? "Registers this device’s platform authenticator, so Face ID, fingerprint, or device PIN can sign you in."
+            ? "Use this device’s Face ID, fingerprint or PIN, a security key, or your phone (scan the QR code)."
             : "This browser does not expose WebAuthn, so a passkey cannot be registered here."}
         </FieldDescription>
       </Field>

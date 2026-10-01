@@ -69,7 +69,7 @@ export function getNavGroups({ isEmployee, canManageUsers, canViewReports }: Nav
           {
             label: "Settings",
             items: [
-              ...(canManageUsers ? [{ href: "/settings", label: "Payroll", icon: Settings2 } as NavItem] : []),
+              ...(canManageUsers ? [{ href: "/settings", label: "Settings", icon: Settings2 } as NavItem] : []),
               { href: "/security", label: "Security", icon: Shield },
             ],
           } as NavGroup,

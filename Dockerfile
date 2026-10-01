@@ -1,6 +1,8 @@
 # ---- base ----
 FROM oven/bun:1 AS base
 WORKDIR /app
+# Office runs on IST; display and month math read local time.
+ENV TZ=Asia/Kolkata
 
 # ---- deps ----
 FROM base AS deps

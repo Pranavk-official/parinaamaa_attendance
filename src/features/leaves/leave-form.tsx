@@ -37,7 +37,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { ResponsiveConfirm } from "@/features/shell/responsive-confirm";
-import { LEAVE_MAIL, leaveMailBody, leaveMailSubject } from "@/lib/domain/leave-mail";
+import { LEAVE_MAIL, leaveMailBody, leaveMailSubject, openCompose } from "@/lib/domain/leave-mail";
 import { submitLeaveAction } from "@/lib/server/actions/leave";
 import type { HalfDaySession, LeaveType } from "@/generated/prisma/client";
 
@@ -98,7 +98,7 @@ export function LeaveForm({
   // Half days cannot be backdated, so the picker stops before today.
   const [today] = useState(() => startOfDay(new Date()));
 
-  // Each button submits the same form; the flag says whether to open Gmail.
+  // Each button submits the same form; the flag says whether to open a mail draft.
   const submitWith = (sendMail: boolean) =>
     handleSubmit((values) => {
       startTransition(async () => {
@@ -120,8 +120,8 @@ export function LeaveForm({
               ? "You had paid days left — submitted as paid leave."
               : "Paid balance is used up — submitted as unpaid regular leave."
         );
-        if (sendMail && "composeUrl" in res) {
-          window.open(res.composeUrl, "_blank", "noopener");
+        if (sendMail && "composeUrl" in res && res.composeUrl) {
+          openCompose(res.composeUrl);
         }
         router.push("/leaves");
         router.refresh();
@@ -136,12 +136,11 @@ export function LeaveForm({
   };
 
   const selectRange = (r: { from?: Date; to?: Date }) => {
+    // Deselecting in the picker must clear the form too, or a stale date submits.
+    if (!r.from) return clearDates();
     setRange(r);
-    if (r.from) {
-      setValue("startDate", format(r.from, "yyyy-MM-dd"), { shouldValidate: true });
-      const end = r.to ?? r.from;
-      setValue("endDate", format(end, "yyyy-MM-dd"), { shouldValidate: true });
-    }
+    setValue("startDate", format(r.from, "yyyy-MM-dd"), { shouldValidate: true });
+    setValue("endDate", format(r.to ?? r.from, "yyyy-MM-dd"), { shouldValidate: true });
   };
 
   const isHalfDay = useWatch({ control, name: "isHalfDay" });

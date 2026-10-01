@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { prisma, prismaWithAudit } from "@/lib/db/prisma";
-import { fiscalStartToKey, type FiscalStart } from "@/lib/domain/fiscal";
+import { fiscalStartToKey, toDateOnly, type FiscalStart } from "@/lib/domain/fiscal";
 
 // Salary month runs from the Nth of month M to the day before N of month M+1.
 // N=1 is a plain calendar month, matching the salary sheet.
@@ -41,4 +41,13 @@ export async function setFiscalStart(start: FiscalStart, actorId: string) {
     create: { key: FISCAL_KEY, value: key },
     update: { value: key },
   });
+}
+/** Holidays from 1 Jan of the current IST year on, as "YYYY-MM-DD" for the client. */
+export async function getHolidays() {
+  const year = toDateOnly(new Date()).getUTCFullYear();
+  const rows = await prisma.companyHoliday.findMany({
+    where: { date: { gte: new Date(Date.UTC(year, 0, 1)) } },
+    orderBy: { date: "asc" },
+  });
+  return rows.map((h) => ({ id: h.id, name: h.name, date: h.date.toISOString().slice(0, 10) }));
 }

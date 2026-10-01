@@ -35,6 +35,7 @@ import {
 import { PageHeader } from "@/features/shell/page-header";
 import { PunchWidget } from "@/features/attendance/punch-widget";
 import { DailySplitChart, MonthlyLeaveChart } from "@/features/billing/charts";
+import { HolidayCalendar } from "@/features/shell/holiday-calendar";
 import { mustUser, type CurrentUser } from "@/lib/auth/auth-user";
 import {
   ALLOCATABLE_LEAVE_TYPES,
@@ -44,7 +45,7 @@ import {
   isUnpaidLeave,
 } from "@/lib/domain/leave-policy";
 import { prisma } from "@/lib/db/prisma";
-import { getFiscalStart } from "@/lib/domain/settings";
+import { getFiscalStart, getHolidays } from "@/lib/domain/settings";
 import { fiscalYear, remainingDays, toDateOnly, countDays } from "@/lib/domain/fiscal";
 
 function iso(d: Date) {
@@ -52,7 +53,7 @@ function iso(d: Date) {
 }
 
 function time(d: Date) {
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 /**
@@ -132,6 +133,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
     pendingCount,
     approvedThisYear,
     onLeaveToday,
+    holidays,
   ] = await Promise.all([
       prisma.user.count({ where: { AND: [EMPLOYEE_WHERE, active] } }),
       prisma.attendance.findMany({
@@ -154,6 +156,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
       prisma.leaveRequest.count({
         where: { status: "APPROVED", startDate: { lte: today }, endDate: { gte: today }, user: active },
       }),
+      getHolidays(),
     ]);
 
   const todaySplit = todayAttendance.reduce(
@@ -171,7 +174,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
             <span className="text-base font-normal text-muted-foreground">FY {fy}</span>
           </>
         }
-        subtitle={`${user.designation ?? user.role?.name ?? "Administrator"} · ${today.toDateString()}`}
+        subtitle={`${user.designation ?? user.role?.name ?? "Administrator"} · ${today.toUTCString().slice(0, 16)}`}
       />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
@@ -186,61 +189,119 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
         <StatCard label="Pending requests" value={pendingCount} icon={Inbox} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Pending leave requests</CardTitle>
-          <CardAction>
-            <Button variant="outline" size="sm" render={<Link href="/leaves" />}>
-              Open queue
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          {pendingRequests.length === 0 ? (
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <ClipboardCheck />
-                </EmptyMedia>
-                <EmptyTitle>Queue is clear</EmptyTitle>
-                <EmptyDescription>Nothing is waiting for approval.</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <Table stacked>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="hidden sm:table-cell">Dates</TableHead>
-                  <TableHead className="text-right">Days</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingRequests.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell data-label="Employee" className="font-medium">
-                      {r.user.name}
-                    </TableCell>
-                    <TableCell data-label="Type">
-                      <Badge variant="secondary">{r.type.replaceAll("_", " ")}</Badge>
-                    </TableCell>
-                    <TableCell
-                      data-label="Dates"
-                      className="hidden text-muted-foreground sm:table-cell"
-                    >
-                      {iso(r.startDate)} → {iso(r.endDate)}
-                    </TableCell>
-                    <TableCell data-label="Days" className="text-right tabular-nums">
-                      {countDays(r.startDate, r.endDate, r.isHalfDay).toFixed(1)}
-                    </TableCell>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Attendance today</CardTitle>
+            <CardDescription>{today.toUTCString().slice(0, 16)}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {todayAttendance.length === 0 ? (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Clock />
+                  </EmptyMedia>
+                  <EmptyTitle>No punches yet</EmptyTitle>
+                  <EmptyDescription>Nobody has punched in today.</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <Table stacked>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="text-right">In</TableHead>
+                    <TableHead className="text-right">Out</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {todayAttendance.map((a) => (
+                    <TableRow key={a.id}>
+                      <TableCell data-label="Employee" className="font-medium">
+                        {a.user.name}
+                        {a.user.designation && (
+                          <span className="ml-2 hidden font-normal text-muted-foreground sm:inline">
+                            {a.user.designation}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell data-label="Type">
+                        <Badge variant="secondary">{a.type.replaceAll("_", " ")}</Badge>
+                      </TableCell>
+                      <TableCell data-label="In" className="text-right tabular-nums">
+                        {time(a.punchIn)}
+                      </TableCell>
+                      <TableCell
+                        data-label="Out"
+                        className="text-right tabular-nums text-muted-foreground"
+                      >
+                        {a.punchOut ? time(a.punchOut) : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Pending leave requests</CardTitle>
+            <CardAction>
+              <Button variant="outline" size="sm" render={<Link href="/leaves" />}>
+                Open queue
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {pendingRequests.length === 0 ? (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <ClipboardCheck />
+                  </EmptyMedia>
+                  <EmptyTitle>Queue is clear</EmptyTitle>
+                  <EmptyDescription>Nothing is waiting for approval.</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <Table stacked>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="hidden sm:table-cell">Dates</TableHead>
+                    <TableHead className="text-right">Days</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pendingRequests.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell data-label="Employee" className="font-medium">
+                        {r.user.name}
+                      </TableCell>
+                      <TableCell data-label="Type">
+                        <Badge variant="secondary">{r.type.replaceAll("_", " ")}</Badge>
+                      </TableCell>
+                      <TableCell
+                        data-label="Dates"
+                        className="hidden text-muted-foreground sm:table-cell"
+                      >
+                        {iso(r.startDate)} → {iso(r.endDate)}
+                      </TableCell>
+                      <TableCell data-label="Days" className="text-right tabular-nums">
+                        {countDays(r.startDate, r.endDate, r.isHalfDay).toFixed(1)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -263,62 +324,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Attendance today</CardTitle>
-          <CardDescription>{today.toDateString()}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {todayAttendance.length === 0 ? (
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <Clock />
-                </EmptyMedia>
-                <EmptyTitle>No punches yet</EmptyTitle>
-                <EmptyDescription>Nobody has punched in today.</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <Table stacked>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">In</TableHead>
-                  <TableHead className="text-right">Out</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {todayAttendance.map((a) => (
-                  <TableRow key={a.id}>
-                    <TableCell data-label="Employee" className="font-medium">
-                      {a.user.name}
-                      {a.user.designation && (
-                        <span className="ml-2 hidden font-normal text-muted-foreground sm:inline">
-                          {a.user.designation}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell data-label="Type">
-                      <Badge variant="secondary">{a.type.replaceAll("_", " ")}</Badge>
-                    </TableCell>
-                    <TableCell data-label="In" className="text-right tabular-nums">
-                      {time(a.punchIn)}
-                    </TableCell>
-                    <TableCell
-                      data-label="Out"
-                      className="text-right tabular-nums text-muted-foreground"
-                    >
-                      {a.punchOut ? time(a.punchOut) : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <HolidayCalendar holidays={holidays} today={iso(today)} />
     </div>
   );
 }
@@ -328,7 +334,7 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
   const fy = fiscalYear(new Date(), start);
   const today = toDateOnly(new Date());
 
-  const [balances, attendance, monthAttendance, leaveRequests] = await Promise.all([
+  const [balances, attendance, monthAttendance, leaveRequests, holidays] = await Promise.all([
     prisma.leaveBalance.findMany({
       where: { userId: user.id, fiscalYear: fy },
       orderBy: { leaveType: "asc" },
@@ -344,6 +350,7 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
       where: { userId: user.id, status: "APPROVED" },
       select: { type: true, startDate: true, endDate: true, isHalfDay: true },
     }),
+    getHolidays(),
   ]);
 
   const dailyMap = new Map<string, { date: string; WFO: number; WFH: number; OFFDAY_WORK: number }>();
@@ -383,7 +390,7 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
             <span className="text-base font-normal text-muted-foreground">FY {fy}</span>
           </>
         }
-        subtitle={`${user.designation ?? "Employee"} · ${today.toDateString()}`}
+        subtitle={`${user.designation ?? "Employee"} · ${today.toUTCString().slice(0, 16)}`}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -406,7 +413,8 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
           </CardContent>
         </Card>
 
-        <Card>
+        {/* Spans the row at sm so the two balance cards pair up instead of orphaning. */}
+        <Card className="sm:col-span-2 lg:col-span-1">
           <CardHeader>
             <CardTitle className="font-normal text-muted-foreground">REGULAR</CardTitle>
             <CardAction>
@@ -417,7 +425,7 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
             <p className="text-2xl font-semibold tabular-nums">
               {unpaidDaysTaken.toFixed(1)}
               <span className="text-sm font-normal text-muted-foreground">
-                {" "}days taken, FY {fy}
+                {" "}days taken
               </span>
             </p>
           </CardContent>
@@ -455,6 +463,8 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
           );
         })}
       </div>
+
+      <HolidayCalendar holidays={holidays} today={iso(today)} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

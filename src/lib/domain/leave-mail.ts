@@ -125,3 +125,27 @@ export function rejectMailBody(i: DecisionMailInput) {
     LEAVE_MAIL.managerName,
   ].join("\n");
 }
+
+/**
+ * Opens a compose window for a Gmail compose URL. Phones and tablets get a
+ * `mailto:` link instead, so the OS hands it to the Gmail app or whichever mail
+ * app is the default (Android shows a chooser when there is none). Browser only.
+ */
+export function openCompose(gmailUrl: string) {
+  if (!window.matchMedia("(pointer: coarse)").matches) {
+    window.open(gmailUrl, "_blank", "noopener");
+    return;
+  }
+  const q = new URL(gmailUrl).searchParams;
+  // mailto wants %20 (not +) and CRLF line breaks, so no URLSearchParams here.
+  const enc = (v: string) => encodeURIComponent(v.replace(/\r?\n/g, "\r\n"));
+  const params = [
+    ["cc", q.get("cc")],
+    ["subject", q.get("su")],
+    ["body", q.get("body")],
+  ]
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}=${enc(v!)}`)
+    .join("&");
+  window.location.href = `mailto:${q.get("to") ?? ""}?${params}`;
+}

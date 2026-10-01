@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { istWallClock } from "./fiscal";
 
 /**
  * Tracked staff: everyone who is not leave-exempt. Payroll, reports and the
@@ -74,5 +75,5 @@ export const AFTERNOON_START_HOUR = 14;
 
 /** Punching out before the afternoon starts means only the morning was worked. */
 export function leftEarly(punchOutAt: Date): boolean {
-  return punchOutAt.getHours() < AFTERNOON_START_HOUR;
+  return istWallClock(punchOutAt).getUTCHours() < AFTERNOON_START_HOUR;
 }

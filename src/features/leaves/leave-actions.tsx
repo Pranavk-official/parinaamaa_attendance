@@ -14,7 +14,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { LEAVE_MAIL, rejectMailBody, rejectMailSubject } from "@/lib/domain/leave-mail";
+import { LEAVE_MAIL, openCompose, rejectMailBody, rejectMailSubject } from "@/lib/domain/leave-mail";
 import { ResponsiveConfirm } from "@/features/shell/responsive-confirm";
 import { useRouter } from "next/navigation";
 import {
@@ -120,7 +120,7 @@ export function LeaveActions({
         return;
       }
       toast.success(action === "approve" ? "Request approved" : "Request rejected");
-      if (sendMail && res.composeUrl) window.open(res.composeUrl, "_blank", "noopener");
+      if (sendMail && res.composeUrl) openCompose(res.composeUrl);
     });
   };
 
