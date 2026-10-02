@@ -2,7 +2,10 @@ import Link from "next/link";
 import { CalendarPlus, Inbox } from "lucide-react";
 import { mustUser, hasPermission } from "@/lib/auth/auth-user";
 import { prisma } from "@/lib/db/prisma";
-import { countDays } from "@/lib/domain/fiscal";
+import { countDays, toDateOnly } from "@/lib/domain/fiscal";
+import { dayMarks } from "@/lib/domain/day-marks";
+import { getHolidays } from "@/lib/domain/settings";
+import { DayCalendar } from "@/features/shell/holiday-calendar";
 import { activeUserWhere, isLeaveExempt } from "@/lib/domain/leave-policy";
 import type { HalfDaySession } from "@/generated/prisma/client";
 import {
@@ -136,6 +139,18 @@ export default async function LeavesPage() {
 
   const pending = requests.filter((r) => r.status === "PENDING").length;
 
+  // Employees get their leave on a calendar too. The table above is capped at
+  // 30; the calendar takes every request so older months still fill in.
+  const calendar = exempt
+    ? null
+    : await Promise.all([
+        getHolidays(),
+        prisma.leaveRequest.findMany({
+          where: { userId: user.id, status: { not: "REJECTED" } },
+          select: { type: true, status: true, startDate: true, endDate: true, isHalfDay: true, halfDaySession: true },
+        }),
+      ]);
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -153,6 +168,16 @@ export default async function LeavesPage() {
           </Button>
         )}
       </PageHeader>
+
+      {calendar && (
+        <DayCalendar
+          title="Leave calendar"
+          description="Your approved and pending leave, with company holidays. Tap a day for details."
+          holidays={calendar[0]}
+          today={toDateOnly(new Date()).toISOString().slice(0, 10)}
+          marks={dayMarks([], calendar[1])}
+        />
+      )}
 
       <Card>
         <CardHeader>

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import {
+  CalendarCheck,
+  CalendarClock,
   CalendarX,
   ClipboardCheck,
   Clock,
@@ -35,7 +37,8 @@ import {
 import { PageHeader } from "@/features/shell/page-header";
 import { PunchWidget } from "@/features/attendance/punch-widget";
 import { DailySplitChart, MonthlyLeaveChart } from "@/features/billing/charts";
-import { HolidayCalendar } from "@/features/shell/holiday-calendar";
+import { DayCalendar } from "@/features/shell/holiday-calendar";
+import { dayMarks } from "@/lib/domain/day-marks";
 import { mustUser, type CurrentUser } from "@/lib/auth/auth-user";
 import {
   ALLOCATABLE_LEAVE_TYPES,
@@ -81,36 +84,43 @@ function monthlyLeaveSeries(
   });
 }
 
-function monthStart() {
-  const now = new Date();
-  return toDateOnly(new Date(now.getFullYear(), now.getMonth(), 1));
-}
 
-function StatCard({
-  label,
-  value,
-  hint,
-  icon: Icon,
-}: {
+type Stat = {
   label: string;
-  value: number;
+  value: string | number;
   hint?: string;
   icon: typeof Users;
-}) {
+  /** 0-100: a thin bar under the value, repeating it visually. */
+  pct?: number;
+};
+
+/** Key numbers in one card: large value, small muted label, hairline dividers. */
+function StatStrip({ stats }: { stats: Stat[] }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="font-normal text-muted-foreground">{label}</CardTitle>
-        <CardAction>
-          <Icon className="size-4 text-muted-foreground" aria-hidden />
-        </CardAction>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold tabular-nums">
-          {value}
-          {hint && <span className="text-sm font-normal text-muted-foreground"> {hint}</span>}
-        </p>
-      </CardContent>
+    <Card className="gap-0 py-0">
+      <dl
+        className={
+          stats.length === 3
+            ? "grid grid-cols-3 gap-px bg-border"
+            : "grid grid-cols-2 gap-px bg-border lg:grid-cols-4"
+        }
+      >
+        {stats.map(({ label, value, hint, icon: Icon, pct }) => (
+          <div key={label} className="flex min-w-0 flex-col gap-1 bg-card p-3 sm:p-4">
+            <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Icon className="size-3.5 shrink-0" aria-hidden />
+              <span className="truncate">{label}</span>
+            </dt>
+            <dd className="text-xl font-semibold tabular-nums sm:text-2xl">{value}</dd>
+            {hint && <dd className="truncate text-xs text-muted-foreground">{hint}</dd>}
+            {pct !== undefined && (
+              <dd aria-hidden className="mt-1 h-1 bg-muted">
+                <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+              </dd>
+            )}
+          </div>
+        ))}
+      </dl>
     </Card>
   );
 }
@@ -177,17 +187,14 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
         subtitle={`${user.designation ?? user.role?.name ?? "Administrator"} · ${today.toUTCString().slice(0, 16)}`}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard label="Employees" value={employeeCount} icon={Users} />
-        <StatCard
-          label="Present today"
-          value={todayAttendance.length}
-          hint={`of ${employeeCount}`}
-          icon={UserCheck}
-        />
-        <StatCard label="On leave today" value={onLeaveToday} icon={CalendarX} />
-        <StatCard label="Pending requests" value={pendingCount} icon={Inbox} />
-      </div>
+      <StatStrip
+        stats={[
+          { label: "Employees", value: employeeCount, icon: Users },
+          { label: "Present today", value: todayAttendance.length, hint: `of ${employeeCount}`, icon: UserCheck },
+          { label: "On leave today", value: onLeaveToday, icon: CalendarX },
+          { label: "Pending requests", value: pendingCount, icon: Inbox },
+        ]}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -324,7 +331,7 @@ async function AdminDashboard({ user }: { user: CurrentUser }) {
         </Card>
       </div>
 
-      <HolidayCalendar holidays={holidays} today={iso(today)} />
+      <DayCalendar holidays={holidays} today={iso(today)} />
     </div>
   );
 }
@@ -333,8 +340,9 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
   const start = await getFiscalStart();
   const fy = fiscalYear(new Date(), start);
   const today = toDateOnly(new Date());
+  const yearStart = new Date(Date.UTC(today.getUTCFullYear(), 0, 1));
 
-  const [balances, attendance, monthAttendance, leaveRequests, holidays] = await Promise.all([
+  const [balances, attendance, yearAttendance, leaveRequests, holidays] = await Promise.all([
     prisma.leaveBalance.findMany({
       where: { userId: user.id, fiscalYear: fy },
       orderBy: { leaveType: "asc" },
@@ -342,47 +350,45 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
     prisma.attendance.findUnique({
       where: { userId_date: { userId: user.id, date: today } },
     }),
+    // The calendar walks this year; the holiday list shares the same window.
     prisma.attendance.findMany({
-      where: { userId: user.id, date: { gte: monthStart() } },
-      orderBy: { date: "asc" },
+      where: { userId: user.id, date: { gte: yearStart } },
+      select: { date: true, type: true, punchIn: true, punchOut: true },
     }),
     prisma.leaveRequest.findMany({
-      where: { userId: user.id, status: "APPROVED" },
-      select: { type: true, startDate: true, endDate: true, isHalfDay: true },
+      where: { userId: user.id, status: { not: "REJECTED" } },
+      select: {
+        type: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        isHalfDay: true,
+        halfDaySession: true,
+      },
     }),
     getHolidays(),
   ]);
+  const approved = leaveRequests.filter((l) => l.status === "APPROVED");
 
-  const dailyMap = new Map<string, { date: string; WFO: number; WFH: number; OFFDAY_WORK: number }>();
-  for (const a of monthAttendance) {
-    const key = iso(a.date);
-    const row = dailyMap.get(key) ?? { date: key, WFO: 0, WFH: 0, OFFDAY_WORK: 0 };
-    row[a.type] += 1;
-    dailyMap.set(key, row);
-  }
-
-  // Paid and compensatory always get a card, allocated or not, so an employee
-  // can see at a glance whether any is available. Regular leave has no card
-  // because it is unpaid and uncapped.
-  const balanceCards = ALLOCATABLE_LEAVE_TYPES.map((leaveType) => {
+  const balance = (leaveType: (typeof ALLOCATABLE_LEAVE_TYPES)[number]) => {
     const b = balances.find((x) => x.leaveType === leaveType);
+    const row = { allocated: b?.allocated ?? 0, perMonth: b?.perMonth ?? 0, used: b?.used ?? 0 };
+    const remaining = remainingDays(row, start, user.joinedDate);
+    const entitled = remaining + row.used;
     return {
-      leaveType,
-      allocated: b?.allocated ?? 0,
-      perMonth: b?.perMonth ?? 0,
-      used: b?.used ?? 0,
+      value: remaining.toFixed(1),
+      hint: `of ${entitled.toFixed(1)} left`,
+      pct: entitled > 0 ? Math.min(100, Math.max(0, (remaining / entitled) * 100)) : 0,
     };
-  });
-
-  const unpaidDaysTaken = leaveRequests.reduce(
+  };
+  const unpaidDaysTaken = approved.reduce(
     (acc, l) =>
       acc + (isUnpaidLeave(l.type) ? countDays(l.startDate, l.endDate, l.isHalfDay) : 0),
     0
   );
 
-
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader
         title={
           <>
@@ -393,99 +399,52 @@ async function EmployeeDashboard({ user }: { user: CurrentUser }) {
         subtitle={`${user.designation ?? "Employee"} · ${today.toUTCString().slice(0, 16)}`}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="sm:col-span-2 lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Today</CardTitle>
-            <CardAction>
-              {attendance ? (
-                <Badge variant="secondary">
-                  {attendance.type.replaceAll("_", " ")} · {time(attendance.punchIn)}
-                  {attendance.punchOut && ` – ${time(attendance.punchOut)}`}
-                </Badge>
-              ) : (
-                <Badge variant="outline">Not punched in</Badge>
-              )}
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <PunchWidget type={attendance?.type ?? null} punchedOut={!!attendance?.punchOut} />
-          </CardContent>
-        </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Today</CardTitle>
+          <CardAction>
+            {attendance ? (
+              <Badge variant="secondary">
+                {attendance.type.replaceAll("_", " ")} · {time(attendance.punchIn)}
+                {attendance.punchOut && ` – ${time(attendance.punchOut)}`}
+              </Badge>
+            ) : (
+              <Badge variant="outline">Not punched in</Badge>
+            )}
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <PunchWidget type={attendance?.type ?? null} punchedOut={!!attendance?.punchOut} />
+        </CardContent>
+      </Card>
 
-        {/* Spans the row at sm so the two balance cards pair up instead of orphaning. */}
-        <Card className="sm:col-span-2 lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="font-normal text-muted-foreground">REGULAR</CardTitle>
-            <CardAction>
-              <Badge variant="outline">Unpaid</Badge>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            <p className="text-2xl font-semibold tabular-nums">
-              {unpaidDaysTaken.toFixed(1)}
-              <span className="text-sm font-normal text-muted-foreground">
-                {" "}days taken
-              </span>
-            </p>
-          </CardContent>
-        </Card>
-        {balanceCards.map((b) => {
-          const remaining = remainingDays(b, start, user.joinedDate);
-          const entitled = remaining + b.used;
-          const pct = entitled > 0 ? Math.min(100, Math.max(0, (remaining / entitled) * 100)) : 0;
-          return (
-            <Card key={b.leaveType}>
-              <CardHeader>
-                <CardTitle className="font-normal text-muted-foreground">
-                  {b.leaveType.replaceAll("_", " ")}
-                  {b.perMonth > 0 && <span className="ml-1">· {b.perMonth}/mo</span>}
-                </CardTitle>
-                <CardAction>
-                  <Badge variant={remaining > 0 ? "secondary" : "outline"}>
-                    {remaining > 0 ? "Available" : "None left"}
-                  </Badge>
-                </CardAction>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                <p className="text-2xl font-semibold tabular-nums">
-                  {remaining.toFixed(1)}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    {" "}/ {entitled.toFixed(1)} days left
-                  </span>
-                </p>
-                {/* Bar repeats the numbers above, so it needs no label of its own. */}
-                <div className="h-1.5 w-full bg-muted" aria-hidden>
-                  <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      {/* Paid and compensatory always show, allocated or not, so an employee can
+          see at a glance whether any is available. Unpaid is uncapped: days taken. */}
+      <StatStrip
+        stats={[
+          { label: "Paid leave", icon: CalendarCheck, ...balance("PAID") },
+          { label: "Comp off", icon: CalendarClock, ...balance("COMPENSATORY") },
+          { label: "Unpaid", icon: CalendarX, value: unpaidDaysTaken.toFixed(1), hint: "days taken" },
+        ]}
+      />
 
-      <HolidayCalendar holidays={holidays} today={iso(today)} />
+      <DayCalendar
+        title="My calendar"
+        description="Attendance, leave and holidays. Tap a day for details."
+        holidays={holidays}
+        today={iso(today)}
+        marks={dayMarks(yearAttendance, leaveRequests)}
+      />
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Daily WFO / WFH split</CardTitle>
-            <CardDescription>Your punches so far this month.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DailySplitChart data={[...dailyMap.values()]} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Monthly leave usage</CardTitle>
-            <CardDescription>Approved leave days, FY {fy}.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MonthlyLeaveChart data={monthlyLeaveSeries(leaveRequests)} />
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly leave usage</CardTitle>
+          <CardDescription>Approved leave days, FY {fy}.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MonthlyLeaveChart data={monthlyLeaveSeries(approved)} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

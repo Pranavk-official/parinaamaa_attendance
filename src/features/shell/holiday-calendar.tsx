@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { deleteHolidayAction, saveHolidayAction } from "@/lib/server/actions/settings";
+import type { DayMarks, MarkKind } from "@/lib/domain/day-marks";
 
 /** `date` is "YYYY-MM-DD", the IST calendar day. */
 export type Holiday = { id: string; date: string; name: string };
@@ -100,35 +101,134 @@ function NoHolidays({ hint }: { hint: string }) {
   );
 }
 
-/** Read-only calendar for the dashboard: holidays marked, upcoming ones listed. */
-export function HolidayCalendar({ holidays, today }: { holidays: Holiday[]; today: string }) {
+// Dot under the day number. Classes are spelled out in full so Tailwind sees them.
+const DOT =
+  "[&_button]:after:absolute [&_button]:after:bottom-1 [&_button]:after:left-1/2 [&_button]:after:size-1.5 [&_button]:after:-translate-x-1/2 [&_button]:after:rounded-full";
+const KINDS: Record<MarkKind, { label: string; cell: string; swatch: string }> = {
+  WFO: { label: "Office", cell: "[&_button]:after:bg-chart-1", swatch: "bg-chart-1" },
+  WFH: { label: "Home", cell: "[&_button]:after:bg-chart-2", swatch: "bg-chart-2" },
+  OFFDAY_WORK: { label: "Off-day work", cell: "[&_button]:after:bg-chart-4", swatch: "bg-chart-4" },
+  LEAVE: { label: "Leave", cell: "[&_button]:after:bg-chart-3", swatch: "bg-chart-3" },
+  LEAVE_PENDING: {
+    label: "Pending leave",
+    cell: "[&_button]:after:border [&_button]:after:border-chart-3",
+    swatch: "border border-chart-3",
+  },
+};
+
+function Swatch({ kind }: { kind: MarkKind }) {
+  return <span aria-hidden className={`size-2 shrink-0 rounded-full ${KINDS[kind].swatch}`} />;
+}
+
+/**
+ * Month calendar: holidays in red, plus optional per-day marks (attendance,
+ * leave) as dots. Tapping a day spells out what the dots mean, so nothing is
+ * conveyed by colour alone.
+ */
+export function DayCalendar({
+  holidays,
+  today,
+  marks,
+  title = "Holiday calendar",
+  description = "Office closed. Working these days earns compensatory leave.",
+}: {
+  holidays: Holiday[];
+  today: string;
+  marks?: DayMarks;
+  title?: string;
+  description?: string;
+}) {
   const [month, setMonth] = useState(() => toDay(today));
-  const upcoming = holidays.filter((h) => h.date >= today).slice(0, 6);
+  const [selected, setSelected] = useState(() => toDay(today));
+  const upcoming = holidays.filter((h) => h.date >= today).slice(0, marks ? 3 : 6);
+
+  const kinds = Object.keys(KINDS) as MarkKind[];
+  const byKind = Object.fromEntries(kinds.map((k) => [k, [] as Date[]])) as Record<MarkKind, Date[]>;
+  // ponytail: one dot per day, the last mark wins; the day detail lists them all.
+  for (const [day, list] of Object.entries(marks ?? {})) byKind[list.at(-1)!.kind].push(toDay(day));
+  // Only kinds this person actually has: an all-zero "Office" row on a leave
+  // calendar is noise.
+  const legend = kinds.filter((k) => Object.values(marks ?? {}).some((l) => l.some((m) => m.kind === k)));
+  const monthKey = format(month, "yyyy-MM");
+  const monthCount = (k: MarkKind) =>
+    Object.entries(marks ?? {}).filter(([d, l]) => d.startsWith(monthKey) && l.some((m) => m.kind === k)).length;
+
+  const day = toIso(selected);
+  const dayHoliday = holidays.find((h) => h.date === day);
+  const dayMarks = marks?.[day] ?? [];
+  const weekend = selected.getDay() === 0 || selected.getDay() === 6;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Holiday calendar</CardTitle>
-        <CardDescription>Office closed. Working these days earns compensatory leave.</CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       {/* Container query: the card sits in a half-width column on wide screens. */}
       <CardContent className="@container">
-        <div className="grid gap-4 @lg:grid-cols-[auto_1fr]">
-          <Calendar
-            month={month}
-            onMonthChange={setMonth}
-            today={toDay(today)}
-            modifiers={{ holiday: holidays.map((h) => toDay(h.date)) }}
-            modifiersClassNames={{ holiday: holidayCell }}
-            className="mx-auto [--cell-size:--spacing(9)]"
-          />
-          <div className="flex min-w-0 flex-col gap-2">
-            <p className="text-sm font-medium">Upcoming</p>
-            {upcoming.length === 0 ? (
-              <NoHolidays hint="Nothing scheduled ahead." />
-            ) : (
-              <HolidayList holidays={upcoming} today={today} onPick={(h) => setMonth(toDay(h.date))} />
+        <div className="grid gap-6 @lg:grid-cols-[auto_1fr]">
+          <div className="flex flex-col gap-3">
+            <Calendar
+              mode="single"
+              required
+              selected={selected}
+              onSelect={setSelected}
+              month={month}
+              onMonthChange={setMonth}
+              today={toDay(today)}
+              modifiers={{ holiday: holidays.map((h) => toDay(h.date)), ...byKind }}
+              modifiersClassNames={{
+                holiday: holidayCell,
+                ...Object.fromEntries(kinds.map((k) => [k, `${DOT} ${KINDS[k].cell}`])),
+              }}
+              className="mx-auto [--cell-size:--spacing(10)]"
+            />
+            {legend.length > 0 && (
+              <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {legend.map((k) => (
+                  <li key={k} className="flex items-center gap-1.5">
+                    <Swatch kind={k} />
+                    {KINDS[k].label}
+                    <span className="font-medium text-foreground tabular-nums">{monthCount(k)}</span>
+                  </li>
+                ))}
+              </ul>
             )}
+          </div>
+          <div className="flex min-w-0 flex-col gap-4">
+            <section aria-live="polite" className="flex flex-col gap-2 bg-muted/50 p-3">
+              <p className="text-sm font-medium">
+                {format(selected, "EEEE, d MMM")}
+                {day === today && <span className="font-normal text-muted-foreground"> · today</span>}
+              </p>
+              <ul className="flex flex-col gap-1.5 text-sm">
+                {dayHoliday && <li className="font-medium text-destructive">Holiday · {dayHoliday.name}</li>}
+                {dayMarks.map((m, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    <Swatch kind={m.kind} />
+                    {m.text}
+                  </li>
+                ))}
+                {!dayHoliday && dayMarks.length === 0 && (
+                  <li className="text-muted-foreground">{weekend ? "Weekend" : "Nothing recorded"}</li>
+                )}
+              </ul>
+            </section>
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium">Upcoming holidays</p>
+              {upcoming.length === 0 ? (
+                <NoHolidays hint="Nothing scheduled ahead." />
+              ) : (
+                <HolidayList
+                  holidays={upcoming}
+                  today={today}
+                  onPick={(h) => {
+                    setMonth(toDay(h.date));
+                    setSelected(toDay(h.date));
+                  }}
+                />
+              )}
+            </div>
           </div>
         </div>
       </CardContent>
