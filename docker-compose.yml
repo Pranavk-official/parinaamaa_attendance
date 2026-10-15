@@ -64,6 +64,10 @@ services:
       # Runs inside this container, which has bun but no wget or curl, and
       # reads CRON_SECRET and PORT from its own environment.
       - "ofelia.job-exec.payroll.command=bun -e \"const p = process.env.PORT || 3000; const r = await fetch('http://127.0.0.1:' + p + '/api/cron/export-payroll', { method: 'POST', headers: { authorization: 'Bearer ' + process.env.CRON_SECRET } }); if (!r.ok) { console.error(r.status); process.exit(1) }\""
+      # 18:45 IST daily. ofelia:latest (0.3.x) wants six fields, seconds first,
+      # and runs in UTC: 13:15:00 UTC = 18:45 IST.
+      - "ofelia.job-exec.auto-punch-out.schedule=0 15 13 * * *"
+      - "ofelia.job-exec.auto-punch-out.command=bun -e \"const p = process.env.PORT || 3000; const r = await fetch('http://127.0.0.1:' + p + '/api/cron/auto-punch-out', { method: 'POST', headers: { authorization: 'Bearer ' + process.env.CRON_SECRET } }); console.log(await r.text()); if (!r.ok) process.exit(1)\""
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }

@@ -7,6 +7,7 @@ import {
   monthsAccrued,
   monthsElapsedInFiscalYear,
   remainingDays,
+  autoPunchOutAt,
   toDateOnly,
   unpaidDeduction,
 } from "../src/lib/domain/fiscal";
@@ -126,6 +127,9 @@ assert.equal(leftEarly(new Date("2026-09-07T11:30:00Z")), false); // 17:00 IST o
 // Attendance day is the IST date: 01:00 IST is still that day, not yesterday in UTC.
 assert.equal(toDateOnly(new Date("2026-09-08T01:00:00+05:30")).toISOString(), "2026-09-08T00:00:00.000Z");
 assert.equal(toDateOnly(new Date("2026-09-08T23:59:00+05:30")).toISOString(), "2026-09-08T00:00:00.000Z");
+// Auto punch-out lands at 18:45 IST on the attendance day, never a half day.
+assert.equal(autoPunchOutAt(toDateOnly(new Date("2026-09-08T10:00:00+05:30"))).toISOString(), "2026-09-08T13:15:00.000Z");
+assert.equal(leftEarly(autoPunchOutAt(new Date("2026-09-08T00:00:00Z"))), false);
 // @db.Date values (UTC midnight) round-trip unchanged.
 assert.equal(toDateOnly(new Date("2026-09-08T00:00:00Z")).toISOString(), "2026-09-08T00:00:00.000Z");
 

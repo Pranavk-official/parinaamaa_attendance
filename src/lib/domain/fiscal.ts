@@ -60,6 +60,11 @@ export function istWallClock(d: Date): Date {
   return new Date(d.getTime() + IST_OFFSET_MS);
 }
 
+/** Anyone still punched in is punched out at 18:45 IST on that day. */
+export function autoPunchOutAt(day: Date): Date {
+  return new Date(day.getTime() + (18 * 60 + 45) * 60_000 - IST_OFFSET_MS);
+}
+
 /** The IST calendar day of `d`, as UTC midnight (what `@db.Date` stores). */
 export function toDateOnly(d: Date): Date {
   const ist = istWallClock(d);

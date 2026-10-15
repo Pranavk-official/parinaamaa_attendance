@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db/prisma";
 import { getFiscalStart } from "@/lib/domain/settings";
-import { countDays, fiscalYear, remainingDays, toDateOnly, type FiscalStart } from "@/lib/domain/fiscal";
+import { autoPunchOutAt, countDays, fiscalYear, remainingDays, toDateOnly, type FiscalStart } from "@/lib/domain/fiscal";
 import {
+  EMPLOYEE_WHERE,
   compensatoryEarned,
   isLeaveExempt,
   leftEarly,
@@ -30,8 +31,7 @@ export async function punchIn(userId: string, preferred: "WFO" | "WFH") {
   return { alreadyPunched: false, attendance };
 }
 
-export async function punchOut(userId: string) {
-  const date = toDateOnly(new Date());
+export async function punchOut(userId: string, date = toDateOnly(new Date()), at = new Date()) {
   const existing = await prisma.attendance.findUnique({
     where: { userId_date: { userId, date } },
   });
@@ -39,10 +39,13 @@ export async function punchOut(userId: string) {
   // Also the idempotency guard for the compensatory credit below: a day can
   // only be punched out once.
   if (existing.punchOut) return { error: "Already punched out" };
-  const attendance = await prisma.attendance.update({
-    where: { id: existing.id },
-    data: { punchOut: new Date() },
+  // Conditional write: the employee and the 18:45 auto punch-out can race.
+  const { count } = await prisma.attendance.updateMany({
+    where: { id: existing.id, punchOut: null },
+    data: { punchOut: at },
   });
+  if (count === 0) return { error: "Already punched out" };
+  const attendance = { ...existing, punchOut: at };
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -77,6 +80,30 @@ export async function punchOut(userId: string) {
   if (halfDay) await markEarlyLeave(userId, date, fy, start, user.joinedDate);
 
   return { attendance, compensatoryEarned: earned, halfDay };
+}
+
+/**
+ * Closes every employee day still open at its 18:45 IST cut-off, today's
+ * included once that time has passed. Older open days are swept too, so a
+ * missed cron run catches up on the next one.
+ */
+export async function autoPunchOut(now = new Date()) {
+  const today = toDateOnly(now);
+  const open = await prisma.attendance.findMany({
+    where: {
+      punchOut: null,
+      date: { lte: today },
+      user: EMPLOYEE_WHERE,
+    },
+    select: { userId: true, date: true },
+  });
+  let closed = 0;
+  for (const a of open) {
+    const at = autoPunchOutAt(a.date);
+    if (at > now) continue; // today, before 18:45
+    if (!("error" in (await punchOut(a.userId, a.date, at)))) closed++;
+  }
+  return { closed };
 }
 
 async function markEarlyLeave(userId: string, date: Date, fy: string, start: FiscalStart, joinedDate: Date | null) {
