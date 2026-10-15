@@ -23,6 +23,8 @@ export type LeaveMailInput = {
   type: string;
   startDate: string;
   endDate: string;
+  // Set when days were taken out of the range: each run is a separate request.
+  runs?: { startDate: string; endDate: string }[];
   days: number;
   isHalfDay: boolean;
   halfDaySession: "MORNING" | "AFTERNOON" | null;
@@ -35,9 +37,14 @@ function or(value: string | null | undefined, placeholder: string) {
   return v === "" ? `[${placeholder}]` : v;
 }
 
+function span(startDate: string, endDate: string) {
+  return startDate === endDate ? startDate : `${startDate} to ${endDate}`;
+}
+
 function whenLabel(i: LeaveMailInput) {
   if (!i.startDate) return "[dates]";
-  return i.startDate === i.endDate ? i.startDate : `${i.startDate} to ${i.endDate}`;
+  if (i.runs && i.runs.length > 1) return i.runs.map((r) => span(r.startDate, r.endDate)).join(", ");
+  return span(i.startDate, i.endDate);
 }
 
 export function leaveMailSubject(i: LeaveMailInput) {

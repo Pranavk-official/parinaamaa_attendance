@@ -12,14 +12,14 @@ import {
   rejectMailBody,
   rejectMailSubject,
 } from "@/lib/domain/leave-mail";
-import { countDays, fiscalYear, remainingDays, toDateOnly } from "@/lib/domain/fiscal";
+import { countDays, dateRuns, fiscalYear, remainingDays, toDateOnly } from "@/lib/domain/fiscal";
 import { getFiscalStart } from "@/lib/domain/settings";
 import type { HalfDaySession, LeaveType } from "@/generated/prisma/client";
 
 export type LeaveFormInput = {
   type: LeaveType;
-  startDate: string; // YYYY-MM-DD
-  endDate: string;
+  // YYYY-MM-DD. Each unbroken run of days is filed as its own request.
+  dates: string[];
   isHalfDay: boolean;
   halfDaySession: HalfDaySession | null;
   reason: string;
@@ -51,22 +51,25 @@ export async function submitLeaveAction(input: LeaveFormInput) {
   const fyStart = await getFiscalStart();
   const fy = fiscalYear(new Date(), fyStart);
   const isHalf = input.isHalfDay;
-  const start = toDateOnly(new Date(`${input.startDate}T00:00:00Z`));
-  // A half day covers one date only, so the range collapses onto the start.
-  const end = isHalf ? start : toDateOnly(new Date(`${input.endDate}T00:00:00Z`));
-  if (end < start) return { error: "End date before start date" };
-  if (isHalf && start < toDateOnly(new Date())) {
+  const runs = dateRuns(input.dates.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)));
+  if (runs.length === 0) return { error: "Pick at least one date." };
+  // A half day covers one date only.
+  if (isHalf && input.dates.length !== 1) return { error: "A half day covers a single date." };
+  const day = (d: string) => toDateOnly(new Date(`${d}T00:00:00Z`));
+  const spans = runs.map((r) => ({ start: day(r.startDate), end: day(r.endDate) }));
+  if (isHalf && spans[0].start < toDateOnly(new Date())) {
     return { error: "A half day can only be requested for today or a later date." };
   }
 
-  const requested = countDays(start, end, isHalf);
+  const requested = spans.reduce((n, s) => n + countDays(s.start, s.end, isHalf), 0);
 
   if (isHalf && !input.halfDaySession) {
     return { error: "Choose morning or afternoon for a half day." };
   }
 
   // The paid balance decides whether this is paid or unpaid, whichever the
-  // employee picked. Half days draw 0.5 from that same balance.
+  // employee picked. Half days draw 0.5 from that same balance. Split requests
+  // are decided together, so they all settle as the same type.
   const paidBalance =
     input.type === "COMPENSATORY"
       ? null
@@ -77,24 +80,25 @@ export async function submitLeaveAction(input: LeaveFormInput) {
         });
   const type = resolveLeaveType(input.type, remainingDays(paidBalance, fyStart, user.joinedDate), requested);
 
-  await prisma.leaveRequest.create({
-    data: {
+  await prisma.leaveRequest.createMany({
+    data: spans.map((s) => ({
       userId: user.id,
       type,
-      startDate: start,
-      endDate: end,
+      startDate: s.start,
+      endDate: s.end,
       isHalfDay: isHalf,
       halfDaySession: isHalf ? input.halfDaySession : null,
       reason: input.reason,
-    },
+    })),
   });
 
   const draft = {
     employeeName: user.name,
     designation: user.designation,
     type,
-    startDate: input.startDate,
-    endDate: isHalf ? input.startDate : input.endDate,
+    startDate: runs[0].startDate,
+    endDate: runs.at(-1)!.endDate,
+    runs,
     days: requested,
     isHalfDay: isHalf,
     halfDaySession: input.halfDaySession,

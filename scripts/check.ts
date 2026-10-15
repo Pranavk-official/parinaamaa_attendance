@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   fiscalYear,
   countDays,
+  dateRuns,
   monthsAccrued,
   monthsElapsedInFiscalYear,
   remainingDays,
@@ -170,3 +171,10 @@ assert.deepEqual(activeUserWhere(new Date(2026, 8, 10)), {
 });
 
 console.log("fiscal checks passed");
+// A range with days taken out splits into one request per unbroken run.
+assert.deepEqual(dateRuns(["2026-10-17", "2026-10-15", "2026-10-16", "2026-10-20", "2026-10-31", "2026-11-01"]), [
+  { startDate: "2026-10-15", endDate: "2026-10-17" },
+  { startDate: "2026-10-20", endDate: "2026-10-20" },
+  { startDate: "2026-10-31", endDate: "2026-11-01" },
+]);
+assert.deepEqual(dateRuns([]), []);

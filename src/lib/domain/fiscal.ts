@@ -46,6 +46,17 @@ export function fiscalYearRange(
   };
 }
 
+/** Groups YYYY-MM-DD dates into unbroken runs of consecutive days. */
+export function dateRuns(dates: string[]): { startDate: string; endDate: string }[] {
+  const runs: { startDate: string; endDate: string }[] = [];
+  for (const d of [...new Set(dates)].sort()) {
+    const last = runs.at(-1);
+    if (last && Date.parse(d) - Date.parse(last.endDate) === 86_400_000) last.endDate = d;
+    else runs.push({ startDate: d, endDate: d });
+  }
+  return runs;
+}
+
 export function countDays(start: Date, end: Date, isHalfDay: boolean): number {
   const msPerDay = 1000 * 60 * 60 * 24;
   const days = Math.round((end.getTime() - start.getTime()) / msPerDay) + 1;

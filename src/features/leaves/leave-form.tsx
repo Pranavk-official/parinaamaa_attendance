@@ -6,7 +6,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { format, differenceInCalendarDays, startOfDay } from "date-fns";
+import { format, eachDayOfInterval, parseISO, startOfDay } from "date-fns";
 import { CalendarDays as CalendarIcon, Mail, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -37,6 +37,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { ResponsiveConfirm } from "@/features/shell/responsive-confirm";
+import { dateRuns } from "@/lib/domain/fiscal";
 import { LEAVE_MAIL, leaveMailBody, leaveMailSubject, openCompose } from "@/lib/domain/leave-mail";
 import { submitLeaveAction } from "@/lib/server/actions/leave";
 import type { HalfDaySession, LeaveType } from "@/generated/prisma/client";
@@ -92,6 +93,9 @@ export function LeaveForm({
   });
 
   const [range, setRange] = useState<{ from?: Date; to?: Date }>({});
+  // Days inside the range the employee clicked off. Each unbroken run of the
+  // rest becomes its own request.
+  const [skipped, setSkipped] = useState<string[]>([]);
   const [mailSubject, setMailSubject] = useState<string | null>(null);
   const [mailBody, setMailBody] = useState<string | null>(null);
   const [mailCc, setMailCc] = useState<string | null>(null);
@@ -104,6 +108,7 @@ export function LeaveForm({
       startTransition(async () => {
         const res = await submitLeaveAction({
           ...values,
+          dates: isHalf ? [values.startDate] : picked,
           mailSubject: subject,
           mailBody: body,
           mailCc: mailCc ?? "",
@@ -130,6 +135,7 @@ export function LeaveForm({
 
   const clearDates = () => {
     setRange({});
+    setSkipped([]);
     setValue("startDate", "");
     setValue("endDate", "");
   };
@@ -137,13 +143,23 @@ export function LeaveForm({
   const selectRange = (r: { from?: Date; to?: Date }) => {
     if (!r.from) return clearDates();
     setRange(r);
+    setSkipped([]);
     setValue("startDate", format(r.from, "yyyy-MM-dd"), { shouldValidate: true });
     setValue("endDate", format(r.to ?? r.from, "yyyy-MM-dd"), { shouldValidate: true });
   };
 
-  // First click starts a range, second click ends it, a third starts over.
+  // First click starts a range, second click ends it. Once a range is set, a
+  // click inside it toggles that day off or back on; a click outside starts over.
   // DayPicker's own logic shrinks the range when a picked day is clicked again.
-  const pickRangeDay = (d: Date) =>
+  const pickRangeDay = (d: Date) => {
+    if (range.from && range.to && range.from < range.to && d >= range.from && d <= range.to) {
+      const iso = format(d, "yyyy-MM-dd");
+      const next = skipped.includes(iso) ? skipped.filter((x) => x !== iso) : [...skipped, iso];
+      if (next.length === eachDayOfInterval({ start: range.from, end: range.to }).length) {
+        return clearDates();
+      }
+      return setSkipped(next);
+    }
     selectRange(
       !range.from || range.to
         ? { from: d }
@@ -151,6 +167,7 @@ export function LeaveForm({
           ? { from: d, to: range.from }
           : { from: range.from, to: d }
     );
+  };
 
   // Flipping half day keeps the start date; a half day cannot be in the past.
   const toggleHalfDay = (half: boolean) => {
@@ -164,11 +181,13 @@ export function LeaveForm({
   const halfDaySession = useWatch({ control, name: "halfDaySession" });
   const watchedReason = useWatch({ control, name: "reason" });
   const isHalf = isHalfDay;
-  const days = range.from
-    ? (range.to ? differenceInCalendarDays(range.to, range.from) : 0) + 1
-    : 0;
+  const picked = range.from
+    ? eachDayOfInterval({ start: range.from, end: range.to ?? range.from })
+        .map((d) => format(d, "yyyy-MM-dd"))
+        .filter((d) => !skipped.includes(d))
+    : [];
   // A half day is always 0.5 days and never spans a range.
-  const requested = isHalf ? 0.5 : days;
+  const requested = isHalf ? 0.5 : picked.length;
 
   // The draft follows the form until the employee edits it; after that their
   // text wins, and "Reset" drops back to the generated draft.
@@ -176,8 +195,9 @@ export function LeaveForm({
     employeeName,
     designation,
     type: leaveType,
-    startDate: range.from ? format(range.from, "yyyy-MM-dd") : "",
-    endDate: range.to && !isHalf ? format(range.to, "yyyy-MM-dd") : range.from ? format(range.from, "yyyy-MM-dd") : "",
+    startDate: picked[0] ?? "",
+    endDate: (isHalf ? picked[0] : picked.at(-1)) ?? "",
+    runs: isHalf ? undefined : dateRuns(picked),
     days: requested,
     isHalfDay: isHalf,
     halfDaySession,
@@ -232,7 +252,9 @@ export function LeaveForm({
                       <CalendarIcon />
                       {range.from ? (
                         range.to && range.to.getTime() !== range.from.getTime() ? (
-                          `${format(range.from, "EEE d MMM")} – ${format(range.to, "EEE d MMM")}`
+                          `${format(range.from, "EEE d MMM")} – ${format(range.to, "EEE d MMM")}${
+                            skipped.length ? `, ${skipped.length} off` : ""
+                          }`
                         ) : (
                           format(range.from, "EEE d MMM yyyy")
                         )
@@ -257,12 +279,19 @@ export function LeaveForm({
                     />
                   ) : (
                     <Calendar
-                      mode="range"
-                      selected={range.from ? { from: range.from, to: range.to } : undefined}
+                      mode="multiple"
+                      selected={picked.map((d) => parseISO(d))}
                       onSelect={(_, d) => pickRangeDay(d)}
                       numberOfMonths={1}
                       autoFocus
                     />
+                  )}
+                  {range.from && (
+                    <div className="border-t p-2">
+                      <Button type="button" variant="ghost" size="sm" className="w-full" onClick={clearDates}>
+                        Clear dates
+                      </Button>
+                    </div>
                   )}
                 </PopoverContent>
               </Popover>
