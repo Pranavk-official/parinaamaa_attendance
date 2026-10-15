@@ -128,7 +128,6 @@ export function LeaveForm({
       });
     })();
 
-  // Half day and full day accept different dates, so a flip resets the picker.
   const clearDates = () => {
     setRange({});
     setValue("startDate", "");
@@ -136,11 +135,28 @@ export function LeaveForm({
   };
 
   const selectRange = (r: { from?: Date; to?: Date }) => {
-    // Deselecting in the picker must clear the form too, or a stale date submits.
     if (!r.from) return clearDates();
     setRange(r);
     setValue("startDate", format(r.from, "yyyy-MM-dd"), { shouldValidate: true });
     setValue("endDate", format(r.to ?? r.from, "yyyy-MM-dd"), { shouldValidate: true });
+  };
+
+  // First click starts a range, second click ends it, a third starts over.
+  // DayPicker's own logic shrinks the range when a picked day is clicked again.
+  const pickRangeDay = (d: Date) =>
+    selectRange(
+      !range.from || range.to
+        ? { from: d }
+        : d < range.from
+          ? { from: d, to: range.from }
+          : { from: range.from, to: d }
+    );
+
+  // Flipping half day keeps the start date; a half day cannot be in the past.
+  const toggleHalfDay = (half: boolean) => {
+    setValue("isHalfDay", half);
+    if (half && range.from && range.from < today) return clearDates();
+    selectRange(range.from ? { from: range.from } : {});
   };
 
   const isHalfDay = useWatch({ control, name: "isHalfDay" });
@@ -215,7 +231,7 @@ export function LeaveForm({
                     <Button variant="outline" className="w-full justify-start font-normal">
                       <CalendarIcon />
                       {range.from ? (
-                        range.to && range.to !== range.from ? (
+                        range.to && range.to.getTime() !== range.from.getTime() ? (
                           `${format(range.from, "EEE d MMM")} – ${format(range.to, "EEE d MMM")}`
                         ) : (
                           format(range.from, "EEE d MMM yyyy")
@@ -232,8 +248,9 @@ export function LeaveForm({
                   {isHalf ? (
                     <Calendar
                       mode="single"
+                      required
                       selected={range.from}
-                      onSelect={(d) => selectRange(d ? { from: d } : {})}
+                      onSelect={(d) => selectRange({ from: d })}
                       disabled={{ before: today }}
                       numberOfMonths={1}
                       autoFocus
@@ -242,7 +259,7 @@ export function LeaveForm({
                     <Calendar
                       mode="range"
                       selected={range.from ? { from: range.from, to: range.to } : undefined}
-                      onSelect={(r) => selectRange(r ?? {})}
+                      onSelect={(_, d) => pickRangeDay(d)}
                       numberOfMonths={1}
                       autoFocus
                     />
@@ -262,10 +279,7 @@ export function LeaveForm({
                 <Checkbox
                   id="isHalfDay"
                   checked={isHalfDay}
-                  onCheckedChange={(c) => {
-                    setValue("isHalfDay", c === true);
-                    clearDates();
-                  }}
+                  onCheckedChange={(c) => toggleHalfDay(c === true)}
                 />
               <FieldLabel htmlFor="isHalfDay" className="font-normal">
                 Half day
