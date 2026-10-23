@@ -78,6 +78,9 @@ services:
     depends_on:
       web:
         condition: service_healthy
+        # ofelia reads job labels only at boot; restart it whenever compose
+        # recreates web, or new/changed jobs never register.
+        restart: true
     networks:
       - internal
     volumes:
