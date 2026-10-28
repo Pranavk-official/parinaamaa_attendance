@@ -11,7 +11,7 @@ import {
   toDateOnly,
   unpaidDeduction,
 } from "../src/lib/domain/fiscal";
-import { compensatoryEarned, leftEarly, resolveLeaveType } from "../src/lib/domain/leave-policy";
+import { compensatoryEarned, isRelieved, leftEarly, resolveLeaveType } from "../src/lib/domain/leave-policy";
 import { monthRange, periodRange } from "../src/lib/domain/export-payroll";
 import {
   leaveMailBody,
@@ -168,5 +168,11 @@ assert.deepEqual(activeUserWhere(new Date(2026, 8, 10)), {
   isBlocked: false,
   OR: [{ relievingDate: null }, { relievingDate: { gte: new Date(Date.UTC(2026, 8, 10)) } }],
 });
+
+// Relieving day still signs in; the next IST day does not.
+const relieved = new Date(Date.UTC(2026, 9, 28));
+assert.equal(isRelieved(null), false);
+assert.equal(isRelieved(relieved, new Date("2026-10-28T18:00:00Z")), false); // 23:30 IST, same day
+assert.equal(isRelieved(relieved, new Date("2026-10-28T18:31:00Z")), true); // 00:01 IST next day
 
 console.log("fiscal checks passed");

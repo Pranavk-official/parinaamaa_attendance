@@ -1,5 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
-import { istWallClock } from "./fiscal";
+import { istWallClock, toDateOnly } from "./fiscal";
 
 /**
  * Tracked staff: everyone who is not leave-exempt. Payroll, reports and the
@@ -19,6 +19,12 @@ export function activeUserWhere(ref: Date = new Date()): Prisma.UserWhereInput {
     isBlocked: false,
     OR: [{ relievingDate: null }, { relievingDate: { gte: day } }],
   };
+}
+
+// Past the relieving date (IST), the account is closed: no sign-in, and any
+// open session stops resolving. The relieving day itself is still worked.
+export function isRelieved(relievingDate: Date | null, now: Date = new Date()): boolean {
+  return !!relievingDate && relievingDate < toDateOnly(now);
 }
 
 export type LeaveExemptSubject = {

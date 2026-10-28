@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth/auth";
+import { isRelieved } from "@/lib/domain/leave-policy";
 import type { User } from "@/generated/prisma/client";
 
 export interface CurrentUser {
@@ -25,7 +26,8 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     where: { id: user.id },
     include: { role: true },
   });
-  if (!prismaUser) return null;
+  // A session opened before the relieving date would otherwise outlive it.
+  if (!prismaUser || isRelieved(prismaUser.relievingDate)) return null;
   return {
     id: prismaUser.id,
     name: prismaUser.name,

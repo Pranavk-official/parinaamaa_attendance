@@ -4,6 +4,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { bearer, jwt } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { prisma } from "@/lib/db/prisma";
+import { isRelieved } from "@/lib/domain/leave-policy";
 
 const EMPLOYEE_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const employeeExpiry = () => new Date(Date.now() + EMPLOYEE_SESSION_MS);
@@ -11,7 +12,12 @@ const employeeExpiry = () => new Date(Date.now() + EMPLOYEE_SESSION_MS);
 const sessionSubject = (userId: string) =>
   prisma.user.findUnique({
     where: { id: userId },
-    select: { isBlocked: true, isSuperAdmin: true, role: { select: { permissions: true } } },
+    select: {
+      isBlocked: true,
+      relievingDate: true,
+      isSuperAdmin: true,
+      role: { select: { permissions: true } },
+    },
   });
 
 // Employees keep a 7-day session window; admins get the 30-day default.
@@ -47,6 +53,9 @@ export const auth = betterAuth({
           // Blocked users cannot sign in at all (password or passkey).
           if (u?.isBlocked) {
             throw new APIError("FORBIDDEN", { message: "Account blocked. Contact your admin." });
+          }
+          if (u && isRelieved(u.relievingDate)) {
+            throw new APIError("FORBIDDEN", { message: "Account closed after your relieving date." });
           }
           if (!isExempt(u)) return { data: { expiresAt: employeeExpiry() } };
         },
