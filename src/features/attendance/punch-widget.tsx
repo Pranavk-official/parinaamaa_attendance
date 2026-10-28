@@ -155,6 +155,16 @@ export function PunchWidget({
           })
         }
       />
+      {/* Same page the entrance QR opens, so the office-IP guard still applies;
+          this just skips the camera. */}
+      <PunchButton
+        label="Punch In (WFO)"
+        variant="outline"
+        title="Punch in as working from office?"
+        description="Today is recorded as working from office and cannot be changed. Only works on the office network."
+        pending={pending}
+        run={() => startTransition(() => router.push("/attendance/wfo-punch"))}
+      />
       {/* Already signed in: scanning the entrance QR punches in for WFO without
           a trip through the login page. */}
       <QrScanner />
