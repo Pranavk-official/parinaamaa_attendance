@@ -47,7 +47,10 @@ export function InstallPrompt() {
   if (standalone) return null;
 
   // Safari never fires beforeinstallprompt, so iOS gets the manual steps.
-  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  // iPadOS 13+ claims to be a Mac; touch points give it away.
+  const isIos =
+    /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    (/macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
   if (!event && !isIos) return null;
 
   const hide = () => {

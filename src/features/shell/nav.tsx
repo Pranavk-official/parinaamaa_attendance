@@ -533,7 +533,9 @@ export function Nav({
       {/* min-w-0: without it this flex item keeps min-width:auto and wide
           tables stretch the page instead of scrolling inside their container. */}
       <SidebarInset className="min-w-0">
-        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b bg-background/85 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+        {/* Installed on iOS, black-translucent paints the page under the status
+            bar; box-content adds the inset on top of the bar's own height. */}
+        <header className="sticky top-0 z-20 box-content flex h-16 shrink-0 pt-[env(safe-area-inset-top)] items-center gap-2 border-b bg-background/85 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
           <div className="flex w-full items-center gap-2 px-4">
             {/* No drawer to open on mobile, so the trigger is desktop-only. */}
             <SidebarTrigger className="-ml-1 hidden md:flex" />
